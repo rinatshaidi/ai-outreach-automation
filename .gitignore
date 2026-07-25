@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+node_modules/
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+
+# Real lead data and generated exports
+data/*.csv
+data/*.xlsx
+data/*.json
+output/
+!data/.gitkeep
+tests/_pipeline_output.csv
+
+# Operating system and IDE files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
