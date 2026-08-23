@@ -1,10 +1,16 @@
-# AI Outreach Automation
+# AI Outreach System
 
-Minimal, auditable tooling for preparing B2B outreach lead lists.
+AI Outreach System is a personal outreach assistant that helps users find companies that may benefit from their skills, experience, and professional background.
 
-The project validates lead data, records evidence for personalization, and
-produces review-ready exports. It does not send emails.
+The system researches each company, identifies relevant collaboration opportunities and public contacts, and prepares personalized outreach messages based on:
 
+- the company’s business, current activities, and potential needs;
+- the user’s verified experience, skills, and career goals;
+- the most relevant collaboration scenario for both sides.
+
+The user can review, edit, or rewrite every message before approving it. A message can be sent through the connected mailbox only after the user explicitly confirms the final version.
+
+The system does not make outreach decisions or send messages without the user’s approval.
 ## Status
 
 The first working script is ready. It runs safely offline by default and never
