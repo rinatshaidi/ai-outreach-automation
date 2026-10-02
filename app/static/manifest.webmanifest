@@ -1,0 +1,12 @@
+{
+  "name": "Single Outreach",
+  "short_name": "Outreach",
+  "description": "Personal opportunity workspace with owner-controlled outreach.",
+  "start_url": "/companies",
+  "display": "standalone",
+  "background_color": "#F8F7F4",
+  "theme_color": "#315EFB",
+  "icons": [
+    {"src": "/static/icons/single-outreach.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any"}
+  ]
+}

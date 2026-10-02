@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}Dashboard · AI Outreach System{% endblock %}
+{% block content %}
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+    <div>
+      <h1 class="h2 mb-1">Dashboard</h1>
+      <p class="text-secondary mb-0">Opportunity-first Mini-CRM: анализ, решения и контролируемый outreach.</p>
+    </div>
+    <div hx-get="/ui/health" hx-trigger="load, every 30s" hx-swap="innerHTML" aria-live="polite">
+      <span class="badge text-bg-secondary">Проверка состояния…</span>
+    </div>
+  </div>
+
+  <section class="card border-0 shadow-sm mb-4"><div class="card-body p-4">
+    <div class="d-flex flex-wrap justify-content-between gap-3">
+      <div>
+        <h2 class="h5 mb-1">Этап 10 · готовность локального пилота</h2>
+        <p class="text-secondary small mb-0">
+          Профиль подтверждается владельцем по блокам; внешняя отправка и публикация выключены.
+        </p>
+      </div>
+      <a class="btn btn-outline-primary" href="/candidate-profile">Проверить профиль</a>
+    </div>
+    <div class="alert {{ 'alert-success' if pilot_readiness.pilot_first_wave_ready else 'alert-warning' }} mt-3 mb-0">
+      <strong>{{ pilot_readiness.status or 'NOT_READY' }}</strong>
+      {% if not pilot_readiness.pilot_first_wave_ready %}
+        · Требуется финальная проверка владельцем. Никакие записи не подтверждаются автоматически.
+      {% else %}
+        · Профиль готов только к локальному пилоту; внешняя отправка остаётся выключенной.
+      {% endif %}
+    </div>
+    <div class="row g-3 mt-1 small">
+      {% for status, count in pilot_readiness.profile_sections.items() %}
+        <div class="col-6 col-md-3"><span class="text-secondary">{{ status }}</span><br><strong>{{ count }}</strong></div>
+      {% endfor %}
+      <div class="col-6 col-md-3"><span class="text-secondary">Safe local flags</span><br><strong>{{ 'да' if pilot_readiness.safe_local_flags else 'нет' }}</strong></div>
+      <div class="col-6 col-md-3"><span class="text-secondary">Owner acceptance</span><br><strong>обязательно</strong></div>
+    </div>
+  </div></section>
+
+  {% set cards = [
+    ('Компании', summary.companies), ('Исследовано', summary.researched),
+    ('Opportunities', summary.opportunities_identified),
+    ('С вакансией', summary.opportunities_with_vacancy),
+    ('Без вакансии', summary.opportunities_without_vacancy),
+    ('Business-first', summary.business_first), ('AI-first', summary.ai_first),
+    ('Hybrid', summary.hybrid), ('Remote', summary.remote_opportunities),
+    ('Relocation', summary.relocation_opportunities), ('Project', summary.project_opportunities),
+    ('Watchlist', summary.watchlist), ('Требуют решения', summary.decision_pending),
+    ('Контакты verified', summary.verified_contacts), ('Активные вакансии', summary.active_jobs),
+    ('Ожидают review', summary.waiting_review), ('Отправлено', summary.sent),
+    ('Ответы', summary.replies), ('Интервью', summary.interviews),
+    ('Project discussions', summary.project_discussions),
+    ('Consulting discussions', summary.consulting_discussions),
+    ('Offer / Agreement', summary.offers_or_agreements),
+    ('Follow-up due', summary.followups_due)
+  ] %}
+  <div class="row g-3 mb-4">
+    {% for label, value in cards %}
+      <div class="col-6 col-xl">
+        <section class="card border-0 shadow-sm h-100"><div class="card-body">
+          <p class="text-secondary small mb-2">{{ label }}</p><p class="h3 mb-0">{{ value }}</p>
+        </div></section>
+      </div>
+    {% endfor %}
+  </div>
+
+  <div class="row g-4">
+    <div class="col-xl-8">
+      <section class="card border-0 shadow-sm h-100"><div class="card-body p-4">
+        <div class="d-flex justify-content-between"><h2 class="h5">Последние события</h2><a href="/communications">Вся лента</a></div>
+        {% if summary.recent_events %}
+          <div class="list-group list-group-flush">
+            {% for event in summary.recent_events %}
+              <a class="list-group-item list-group-item-action px-0" href="/companies/{{ event.company_id }}">
+                <span class="badge text-bg-light me-2">{{ event.event_type }}</span>{{ event.summary }}
+                <small class="d-block text-secondary mt-1">{{ event.occurred_at.strftime('%d.%m.%Y %H:%M') }}</small>
+              </a>
+            {% endfor %}
+          </div>
+        {% else %}<p class="text-secondary mb-0">Событий пока нет. Добавьте первую компанию.</p>{% endif %}
+      </div></section>
+    </div>
+    <div class="col-xl-4">
+      <section class="card border-0 shadow-sm h-100"><div class="card-body p-4">
+        <h2 class="h5">Безопасные настройки</h2>
+        <dl class="row small mb-0">
+          <dt class="col-7">Demo mode</dt><dd class="col-5"><code>{{ settings.demo_mode | lower }}</code></dd>
+          <dt class="col-7">Реальные письма</dt><dd class="col-5"><code>{{ settings.allow_real_email | lower }}</code></dd>
+          <dt class="col-7">Публикация</dt><dd class="col-5"><code>{{ settings.allow_publication | lower }}</code></dd>
+          <dt class="col-7">Внешний экспорт</dt><dd class="col-5"><code>{{ settings.allow_external_export | lower }}</code></dd>
+        </dl>
+      </div></section>
+    </div>
+  </div>
+{% endblock %}

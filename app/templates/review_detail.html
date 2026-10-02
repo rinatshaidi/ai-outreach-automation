@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% set ru = request.state.dashboard_locale == 'ru' %}
+{% set draft = detail.current %}
+{% set shown = viewed_revision %}
+{% block title %}{{ 'Проверка письма' if ru else 'Draft review' }} · AI Outreach System{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
+  <div>
+    <a href="/letters?tab=drafts" class="small">← {{ 'Письма' if ru else 'Letters' }}</a>
+    <h1 class="h3 mb-1">{{ detail.company_name }}</h1>
+    <div class="text-secondary">{{ detail.contact_name }} · {{ 'версия' if ru else 'revision' }} {{ shown.revision }} · {{ ('Развёрнутое' if shown.message_format == 'expanded' else 'Короткое') if ru else shown.message_format|capitalize }} · {{ ('Профессиональный' if shown.tone == 'professional' else 'Дружелюбный') if ru else shown.tone|capitalize }}</div>
+  </div>
+  {% if valid_approval %}<span class="badge text-bg-success fs-6">{{ 'Версия подтверждена' if ru else 'Revision confirmed' }}</span>{% elif is_historical %}<span class="badge text-bg-secondary fs-6">{{ 'Предыдущая версия' if ru else 'Previous revision' }}</span>{% else %}<span class="badge {{ 'text-bg-primary' if draft.status == 'ready' else 'text-bg-danger' }} fs-6">{{ draft.status|ui_status(request.state.dashboard_locale) }}</span>{% endif %}
+</div>
+
+{% if action_error == 'ai_rewrite_unavailable' %}<div class="alert alert-danger">{{ 'AI-переработка сейчас не настроена. Новая версия не создана. Для работы кнопки необходимо подключить настоящий AI provider и API key.' if ru else 'AI rewrite is not configured. No revision was created. Configure a real AI provider and API key to use this action.' }}</div>{% elif action_error == 'ai_provider_auth_failed' %}<div class="alert alert-danger">{{ 'OpenAI отклонил API-ключ. Замените production secret. Новая версия не создана.' if ru else 'OpenAI rejected the API key. Replace the production secret. No revision was created.' }}</div>{% elif action_error == 'ai_provider_limit_reached' %}<div class="alert alert-danger">{{ 'Достигнут лимит запросов, квоты или оплаты OpenAI. Новая версия не создана.' if ru else 'The OpenAI rate, quota, or billing limit was reached. No revision was created.' }}</div>{% elif action_error == 'ai_provider_request_rejected' %}<div class="alert alert-danger">{{ 'OpenAI отклонил параметры запроса. Новая версия не создана.' if ru else 'OpenAI rejected the request configuration. No revision was created.' }}</div>{% elif action_error == 'ai_provider_temporarily_unavailable' %}<div class="alert alert-danger">{{ 'OpenAI временно недоступен. Попробуйте позже. Новая версия не создана.' if ru else 'OpenAI is temporarily unavailable. Try again later. No revision was created.' }}</div>{% elif action_error in ['ai_provider_connection_failed', 'ai_provider_invalid_response', 'ai_rewrite_failed'] %}<div class="alert alert-danger">{{ 'AI provider не смог безопасно вернуть корректное письмо. Новая версия не создана.' if ru else 'The AI provider did not safely return a valid email. No revision was created.' }}</div>{% elif action_error == 'approval_required' %}<div class="alert alert-danger">{{ 'Сначала подтвердите финальную версию письма.' if ru else 'Confirm the final revision before sending.' }}</div>{% endif %}
+{% if action_notice == 'approved' %}<div class="alert alert-success">{{ 'Этот вариант выбран и подтверждён. Теперь можно проверить внутреннюю тестовую доставку; компания письмо не получит.' if ru else 'This variant is confirmed. You can now test internal delivery; the company will receive nothing.' }}</div>{% elif action_notice == 'revision_restored' %}<div class="alert alert-success">{{ 'Предыдущая версия восстановлена как новая revision и снова требует подтверждения.' if ru else 'The previous version was restored as a new revision and requires confirmation.' }}</div>{% endif %}
+
+{% if is_historical %}<div class="alert alert-secondary">{{ 'Вы открыли предыдущую версию только для просмотра. Текущая версия не изменена.' if ru else 'You opened a previous revision for viewing. The current revision is unchanged.' }}</div>{% endif %}
+<div class="alert alert-warning">{{ 'Редактирование, AI-переработка и подтверждение ничего не отправляют. Внутренний тест доставки также не отправляет письмо компании.' if ru else 'Editing, AI rewrite, and confirmation send nothing. The internal delivery test also sends nothing to the company.' }}</div>
+
+<div class="row g-4">
+  <div class="col-xl-8">
+    {% if alternative_variants %}<section class="card border-0 shadow-sm mb-4"><div class="card-body"><h2 class="h5">{{ 'Сравнить варианты' if ru else 'Compare variants' }}</h2><div class="row g-3"><div class="col-md-6"><div class="border rounded p-3 h-100"><strong>{{ 'Текущий вариант' if ru else 'Current variant' }} · {{ 'Профессиональный' if draft.tone == 'professional' and ru else ('Дружелюбный' if draft.tone == 'friendly' and ru else draft.tone|capitalize) }}</strong><p class="small mt-2 mb-0">{{ draft.body[:220] }}{% if draft.body|length > 220 %}…{% endif %}</p></div></div>{% for item in alternative_variants[:1] %}<div class="col-md-6"><a class="border rounded p-3 h-100 d-block text-decoration-none text-body" href="/review/{{ item.id }}"><strong>{{ 'Другой вариант' if ru else 'Alternative' }} · {{ 'Профессиональный' if item.tone == 'professional' and ru else ('Дружелюбный' if item.tone == 'friendly' and ru else item.tone|capitalize) }}</strong><p class="small mt-2 mb-0">{{ item.body[:220] }}{% if item.body|length > 220 %}…{% endif %}</p></a></div>{% endfor %}</div></div></section>{% endif %}
+    <section class="card border-0 shadow-sm mb-4"><div class="card-body">
+      <h2 class="h5">{{ 'Текст письма' if ru else 'Letter text' }}</h2>
+      {% if is_historical %}
+        <div class="mb-3"><strong>{{ shown.subject }}</strong></div><div style="white-space:pre-wrap">{{ shown.body }}</div>
+        <hr><form method="post" action="/review/{{ draft.id }}/restore"><input type="hidden" name="revision" value="{{ draft.revision }}"><input type="hidden" name="source_draft_id" value="{{ shown.id }}"><input name="comment" class="form-control mb-2" placeholder="{{ 'Комментарий к восстановлению' if ru else 'Restore note' }}"><button class="btn btn-primary">{{ 'Восстановить эту версию' if ru else 'Restore this revision' }}</button></form>
+      {% else %}
+        <form method="post" action="/review/{{ draft.id }}/edit">
+          <input type="hidden" name="revision" value="{{ draft.revision }}">
+          <label class="form-label w-100">{{ 'Тема' if ru else 'Subject' }}<input name="subject" class="form-control" maxlength="240" required value="{{ draft.subject }}"></label>
+          <label class="form-label w-100">{{ 'Текст' if ru else 'Body' }}<textarea name="body" class="form-control" rows="14" required>{{ draft.body }}</textarea></label>
+          <input name="comment" class="form-control mb-2" placeholder="{{ 'Причина изменения' if ru else 'Reason for change' }}">
+          <button class="btn btn-primary">{{ 'Сохранить изменения' if ru else 'Save changes' }}</button>
+        </form>
+      {% endif %}
+    </div></section>
+
+    <section class="card border-0 shadow-sm mb-4"><div class="card-body">
+      <h2 class="h5">{{ 'История версий' if ru else 'Revision history' }}</h2>
+      {% for item in alternative_variants %}<div class="alert alert-light border py-2"><strong>{{ 'Другой вариант письма' if ru else 'Alternative variant' }}:</strong> <a href="/review/{{ item.id }}">{{ 'Профессиональный' if item.tone == 'professional' and ru else ('Дружелюбный' if item.tone == 'friendly' and ru else item.tone|capitalize) }} · {{ 'версия' if ru else 'version' }} {{ item.revision }}</a></div>{% endfor %}
+      {% for item in detail.revisions %}{% set kind = revision_kinds.get(item.id|string, '') %}<div class="d-flex justify-content-between align-items-center border-bottom py-2"><div><a href="/review/{{ draft.id }}?view={{ item.id }}"><strong>{{ 'Версия' if ru else 'Version' }} {{ item.revision }}</strong></a> · {% if kind == 'edited' %}{{ 'Ручное изменение' if ru else 'Manual edit' }}{% elif kind == 'ai_rewritten' %}{{ 'AI-переработка' if ru else 'AI rewrite' }}{% elif kind == 'restored' %}{{ 'Восстановленная версия' if ru else 'Restored revision' }}{% else %}{{ 'Профессиональный' if item.tone == 'professional' and ru else ('Дружелюбный' if item.tone == 'friendly' and ru else item.tone|capitalize) }}{% endif %}<div class="small text-secondary">{{ item.created_at.strftime('%d.%m.%Y %H:%M') }}</div></div>{% if item.id == draft.id %}<span class="badge text-bg-primary">{{ 'Текущая' if ru else 'Current' }}</span>{% endif %}</div>{% endfor %}
+    </div></section>
+  </div>
+
+  <div class="col-xl-4">
+    {% if not is_historical %}
+    <section class="card border-success shadow-sm mb-4"><div class="card-body">
+      <h2 class="h5">{{ 'Выбор и подтверждение' if ru else 'Select and confirm' }}</h2>
+      {% if valid_approval %}<p class="text-success mb-0">{{ 'Текущая версия подтверждена. Теперь доступен тест письма.' if ru else 'The current revision is confirmed. The email test is now available.' }}</p>{% else %}<p class="small">{{ 'Выберите этот вариант как финальный. Другой вариант останется в истории.' if ru else 'Select this as the final variant. The alternative remains in history.' }}</p><form method="post" action="/review/{{ draft.id }}/approve"><input type="hidden" name="revision" value="{{ draft.revision }}"><input name="comment" class="form-control mb-2" placeholder="{{ 'Комментарий — необязательно' if ru else 'Comment — optional' }}"><button class="btn btn-success w-100" {% if draft.status != 'ready' %}disabled{% endif %}>{{ 'Выбрать и подтвердить' if ru else 'Select and confirm' }}</button></form>{% if draft.status != 'ready' %}<div class="small text-danger mt-2">{{ 'Письмо не прошло проверку. Исправьте указанную ошибку или создайте новую версию.' if ru else 'The draft did not pass validation. Resolve the shown issue or create a new revision.' }}</div>{% endif %}{% endif %}
+    </div></section>
+
+    <section class="card border-primary shadow-sm mb-4"><div class="card-body">
+      <h2 class="h5">{{ 'Переписать с помощью ИИ' if ru else 'Rewrite with AI' }}</h2>
+      <p class="small text-secondary">{% if ai_rewrite_provider == 'unavailable' %}{{ 'AI provider пока не настроен. Кнопка честно покажет ошибку и не создаст фиктивную версию.' if ru else 'No AI provider is configured. The action will show an error and will not create a fake revision.' }}{% else %}{{ 'Опишите обычным языком, что нужно изменить. Результат сохранится новой версией.' if ru else 'Describe the change in plain language. The result will be saved as a new revision.' }}{% endif %}</p>
+      <form method="post" action="/review/{{ draft.id }}/regenerate"><input type="hidden" name="revision" value="{{ draft.revision }}"><textarea required name="campaign_goal" class="form-control mb-2" rows="3" placeholder="{{ 'Например: сделай письмо менее официальным' if ru else 'For example: make the letter less formal' }}"></textarea><input type="hidden" name="language" value="same"><button class="btn btn-outline-primary w-100">{{ 'Переписать с помощью ИИ' if ru else 'Rewrite with AI' }}</button></form>
+    </div></section>
+
+    <section class="card border-warning shadow-sm mb-4"><div class="card-body">
+      <h2 class="h5">{{ 'Дополнительные действия' if ru else 'Additional actions' }}</h2><div class="d-grid gap-2"><form method="post" action="/review/{{ draft.id }}/defer"><input type="hidden" name="revision" value="{{ draft.revision }}"><button class="btn btn-outline-warning w-100">{{ 'Отложить' if ru else 'Defer' }}</button></form><form method="post" action="/review/{{ draft.id }}/reject"><input type="hidden" name="revision" value="{{ draft.revision }}"><button class="btn btn-outline-danger w-100">{{ 'Не отправлять' if ru else 'Do not send' }}</button></form></div>
+    </div></section>
+
+    <section class="card border-warning shadow-sm mb-4"><div class="card-body">
+      <h2 class="h5">{{ 'Тест доставки' if ru else 'Delivery test' }}</h2><p class="small">{{ 'Проверяет внутреннюю тестовую доставку на сервере. Компания письмо не получит. Реальное действие позже будет называться «Отправить компании».' if ru else 'Checks internal server delivery. The company receives nothing. The future real action will be named “Send to company”.' }}</p><form method="post" action="/review/{{ draft.id }}/send-test"><button class="btn btn-warning w-100" {% if not valid_approval %}disabled{% endif %}>{{ 'Проверить тестовую доставку' if ru else 'Test internal delivery' }}</button></form>{% if not valid_approval %}<div class="small text-secondary mt-2">{{ 'Сначала нажмите «Выбрать и подтвердить» выше.' if ru else 'First select and confirm the current revision above.' }}</div>{% endif %}
+    </div></section>
+
+    <section id="learning" class="card border-secondary shadow-sm mb-4"><div class="card-body"><h2 class="h5">{{ 'Оценить письмо' if ru else 'Rate this draft' }}</h2><p class="small text-secondary">{{ 'Оценка сохраняется локально и помогает предложить калибровку после нескольких решений.' if ru else 'Feedback stays local and supports a calibration proposal after several decisions.' }}</p>{% if request.query_params.get('feedback') == 'saved' %}<div class="alert alert-success py-2">{{ 'Оценка сохранена.' if ru else 'Feedback saved.' }}</div>{% endif %}<form method="post" action="/review/{{ draft.id }}/feedback"><select class="form-select mb-2" name="decision" required><option value="">{{ 'Ваша оценка' if ru else 'Your rating' }}</option><option value="good">{{ 'Хорошее письмо' if ru else 'Good draft' }}</option><option value="needs_edit">{{ 'Нужно исправить' if ru else 'Needs edits' }}</option><option value="not_usable">{{ 'Не подходит' if ru else 'Not usable' }}</option></select><select class="form-select mb-2" name="reason"><option value="">{{ 'Причина — необязательно' if ru else 'Reason — optional' }}</option><option value="good_personalization">{{ 'Хорошая персонализация' if ru else 'Good personalization' }}</option><option value="too_generic">{{ 'Слишком общее' if ru else 'Too generic' }}</option><option value="too_long">{{ 'Слишком длинное' if ru else 'Too long' }}</option><option value="too_formal">{{ 'Слишком формальное' if ru else 'Too formal' }}</option><option value="too_casual">{{ 'Слишком дружелюбное' if ru else 'Too casual' }}</option><option value="other">{{ 'Другое' if ru else 'Other' }}</option></select><input class="form-control mb-2" name="comment" maxlength="500" placeholder="{{ 'Короткий комментарий — необязательно' if ru else 'Short comment — optional' }}"><button class="btn btn-outline-secondary w-100">{{ 'Сохранить оценку' if ru else 'Save feedback' }}</button></form></div></section>
+    {% endif %}
+
+  </div>
+</div>
+{% endblock %}

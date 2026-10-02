@@ -1,0 +1,35 @@
+<section id="letter" class="workspace-section">
+<h2 class="h5">{{ 'Письма' if ru else 'Messages' }}</h2>
+{% if requires_regeneration %}<div class="alert alert-warning">
+  <strong>{{ 'Анализ обновлён — письмо требует обновления.' if ru else 'Analysis updated — messages need regeneration.' }}</strong>
+  {{ 'Старые варианты сохранены в истории и не будут показаны как готовые к подтверждению.' if ru else 'Previous variants remain in history and are not presented as ready to confirm.' }}
+</div>{% endif %}
+{% if not latest_drafts_by_variant %}
+  {% if recommendation and preferred_contacts %}<form method="post" action="/companies/{{ company.id }}/prepare-letter" class="draft-editor">
+    <input type="hidden" name="recommendation_id" value="{{ recommendation.id }}"><input type="hidden" name="version" value="{{ recommendation.version }}">
+    <label>{{ 'Получатель' if ru else 'Recipient' }}<select name="contact_id" class="form-select">{% for item in preferred_contacts %}<option value="{{ item.id }}">{{ item.name }}</option>{% endfor %}</select></label>
+    <button class="btn btn-primary">{{ 'Сгенерировать 4 варианта из текущего анализа' if requires_regeneration and ru else ('Generate 4 variants from current analysis' if requires_regeneration else ('Подтвердить интерес — подготовить 4 варианта' if ru else 'Confirm interest — prepare 4 variants')) }}</button>
+  </form>{% endif %}
+{% else %}
+{% set variants = [('A', 'Развёрнутое · профессионально' if ru else 'Long · professional'), ('B', 'Развёрнутое · дружелюбно' if ru else 'Long · friendly'), ('C', 'Короткое · профессионально' if ru else 'Short · professional'), ('D', 'Короткое · дружелюбно' if ru else 'Short · friendly')] %}
+{% set available = namespace(first=true) %}
+<div class="nav nav-pills gap-2 mb-3" role="tablist">{% for key,label in variants %}{% set draft = latest_drafts_by_variant.get(key) %}{% if draft %}<button type="button" class="nav-link {{ 'active' if available.first else '' }}" data-bs-toggle="tab" data-bs-target="#message-{{ key }}" role="tab">{{ label }}</button>{% set available.first=false %}{% endif %}{% endfor %}</div>
+{% set available = namespace(first=true) %}<div class="tab-content">
+{% for key,label in variants %}{% set draft = latest_drafts_by_variant.get(key) %}{% if draft %}
+<div id="message-{{ key }}" class="tab-pane {{ 'active' if available.first else '' }}" role="tabpanel">{% set available.first=false %}
+{% set approval = valid_approval_by_draft.get(draft.id) %}
+{% if draft.language != letter_language %}<p class="alert alert-info">{{ 'Сохранённое письмо написано на другом языке. Чтобы получить выбранный язык, используйте изменение с помощью ИИ; исходная версия сохранится.' if ru else 'This saved message uses another language. Use AI editing to create a version in the selected language; the original is preserved.' }}</p>{% else %}
+<form method="post" action="/review/{{ draft.id }}/edit" class="draft-editor" data-single-submit>
+<input type="hidden" name="workspace" value="true"><input type="hidden" name="revision" value="{{ draft.revision }}">
+<label>{{ 'Тема' if ru else 'Subject' }}<input name="subject" class="form-control" required maxlength="240" value="{{ draft.subject }}"></label>
+<label>{{ 'Сообщение' if ru else 'Message' }}<textarea id="draft-body-{{ draft.id }}" name="body" class="form-control" rows="{{ 6 if key in ['C','D'] else 12 }}" required>{{ draft.body }}</textarea></label>
+<div class="d-flex flex-wrap gap-2"><button type="submit" class="btn btn-outline-primary">{{ 'Сохранить' if ru else 'Save' }}</button><button type="button" class="btn btn-primary" data-copy-draft="draft-body-{{ draft.id }}">{{ 'Скопировать' if ru else 'Copy' }}</button></div></form>
+{% endif %}
+<details class="secondary-details"><summary>{{ 'Изменить с помощью ИИ' if ru else 'Edit with AI' }}</summary><form method="post" action="/review/{{ draft.id }}/regenerate" class="draft-editor mt-3" data-single-submit><input type="hidden" name="workspace" value="true"><input type="hidden" name="revision" value="{{ draft.revision }}"><label>{{ 'Что изменить?' if ru else 'What should change?' }}<textarea class="form-control" name="campaign_goal" rows="3" required></textarea></label><label>{{ 'Язык письма' if ru else 'Message language' }}<select class="form-select" name="language"><option value="{{ letter_language }}">{{ 'Русский' if letter_language == 'ru' else 'English' }}</option><option value="{{ 'en' if letter_language == 'ru' else 'ru' }}">{{ 'English' if letter_language == 'ru' else 'Русский' }}</option></select></label><button type="submit" class="btn btn-primary">{{ 'Применить' if ru else 'Apply' }}</button></form></details>
+<details class="secondary-details"><summary>{{ 'История версий' if ru else 'Version history' }}</summary>{% for item in draft_revisions_by_variant.get(key, []) %}<div class="activity-row"><span>{{ 'Версия' if ru else 'Version' }} {{ item.revision }} · {{ item.created_at|local_dt }}</span>{% if item.id != draft.id %}<form method="post" action="/review/{{ draft.id }}/restore"><input type="hidden" name="workspace" value="true"><input type="hidden" name="revision" value="{{ draft.revision }}"><input type="hidden" name="source_draft_id" value="{{ item.id }}"><button class="btn btn-sm btn-link">{{ 'Восстановить' if ru else 'Restore' }}</button></form>{% endif %}</div>{% endfor %}</details>
+<div class="owner-actions mt-3">{% if approval %}<span>{{ 'Письмо подтверждено. Отправки не было.' if ru else 'Message confirmed. Nothing was sent.' }}</span>{% elif draft.language == letter_language %}<form method="post" action="/review/{{ draft.id }}/approve"><input type="hidden" name="workspace" value="true"><input type="hidden" name="revision" value="{{ draft.revision }}"><button class="btn btn-primary" {{ 'disabled' if draft.status != 'ready' else '' }}>{{ 'Подтвердить' if ru else 'Confirm' }}</button></form>{% endif %}
+{% for action,label in [('defer', 'Отложить' if ru else 'Defer'), ('reject','Не использовать' if ru else 'Do not use')] %}<form method="post" action="/review/{{ draft.id }}/{{ action }}"><input type="hidden" name="workspace" value="true"><input type="hidden" name="revision" value="{{ draft.revision }}"><button class="btn btn-outline-secondary">{{ label }}</button></form>{% endfor %}</div>
+</div>{% endif %}{% endfor %}</div>
+{% endif %}
+{% if recommendation and recommendation.user_decision == 'pending' %}<form method="post" action="/companies/{{ company.id }}/recommendations/{{ recommendation.id }}/decision" class="mt-3"><input type="hidden" name="version" value="{{ recommendation.version }}"><input type="hidden" name="decision" value="not_relevant"><input type="hidden" name="confirmed" value="true"><button class="btn btn-link">{{ 'Компания неинтересна' if ru else 'Not interested in this company' }}</button></form>{% endif %}
+</section>

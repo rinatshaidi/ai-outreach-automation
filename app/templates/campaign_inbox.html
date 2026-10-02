@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% set ru = request.state.dashboard_locale == 'ru' %}
+{% block title %}{{ 'Кампании' if ru else 'Campaigns' }} · Single Outreach{% endblock %}
+{% block content %}
+<a href="/companies">← {{ 'Подобранные компании' if ru else 'Selected companies' }}</a>
+<h1 class="h2 mt-3">{{ 'Кампании' if ru else 'Campaigns' }}</h1>
+{% for campaign in campaigns %}<article class="card border-0 shadow-sm my-3"><div class="card-body p-4">
+<h2 class="h4">{{ campaign.name }}</h2><p>{{ campaign.goal }}</p>
+<a class="btn btn-primary" href="/campaigns/{{ campaign.id }}">{{ 'Открыть возможности' if ru else 'Open opportunities' }}</a>
+</div></article>{% else %}<p>{{ 'Кампаний пока нет. Найденные возможности доступны в общем списке компаний.' if ru else 'No campaigns yet. Discovered opportunities are available in the company inbox.' }}</p>{% endfor %}
+<details class="secondary-details"><summary>{{ 'Настройка кампаний' if ru else 'Campaign configuration' }}</summary><a href="/campaigns?view=technical">{{ 'Открыть расширенную настройку' if ru else 'Open advanced configuration' }}</a></details>
+{% endblock %}

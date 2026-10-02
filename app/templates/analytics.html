@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Analytics & Portfolio · AI Outreach System{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-end gap-3 mb-4">
+  <div><h1 class="h2 mb-1">Analytics & Portfolio</h1><p class="text-secondary mb-0">Качество opportunities, осознанные решения и outcomes — не объём рассылки.</p></div>
+  <a class="btn btn-outline-secondary" href="/analytics">Сбросить фильтры</a>
+</div>
+
+<section class="card border-0 shadow-sm mb-4"><div class="card-body">
+  <form method="get" action="/analytics" class="row g-2">
+    <div class="col-lg-3"><input name="q" value="{{ filters.q or '' }}" class="form-control" placeholder="Компания или домен"></div>
+    <div class="col-lg-2"><input name="opportunity_type" value="{{ filters.opportunity_type or '' }}" class="form-control" placeholder="Opportunity type"></div>
+    <div class="col-lg-2"><select name="positioning_strategy" class="form-select"><option value="">Positioning</option>{% for value in ['business_first','ai_first','hybrid'] %}<option value="{{ value }}" {% if filters.positioning_strategy == value %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></div>
+    <div class="col-lg-2"><select name="vacancy" class="form-select"><option value="">Vacancy: all</option><option value="with" {% if filters.vacancy == 'with' %}selected{% endif %}>with vacancy</option><option value="without" {% if filters.vacancy == 'without' %}selected{% endif %}>without vacancy</option></select></div>
+    <div class="col-lg-2"><input name="country" value="{{ filters.country or '' }}" class="form-control" placeholder="Country"></div>
+    <div class="col-lg-1"><button class="btn btn-primary w-100">Filter</button></div>
+    <details class="col-12"><summary class="small text-secondary">Расширенные фильтры</summary><div class="row g-2 mt-1">
+      {% for key, label in [('company_size','Company size'),('maturity_stage','Maturity'),('collaboration_format','Collaboration'),('workplace_format','Workplace'),('decision_maker_role','Decision-maker'),('source_trust','Source trust'),('signal_freshness','Freshness'),('pipeline_status','Pipeline'),('user_decision','Decision'),('outcome','Outcome')] %}<div class="col-md-3"><input name="{{ key }}" value="{{ filters[key] or '' }}" class="form-control form-control-sm" placeholder="{{ label }}"></div>{% endfor %}
+    </div></details>
+  </form>
+</div></section>
+
+{% set cards = [
+  ('Opportunities', 'opportunities_identified'), ('Без вакансии', 'opportunities_without_vacancy'),
+  ('С вакансией', 'opportunities_with_vacancy'), ('Business-first', 'business_first'),
+  ('AI-first', 'ai_first'), ('Hybrid', 'hybrid'), ('Decision pending', 'decision_pending'),
+  ('Real sent', 'real_sent'), ('Positive replies', 'positive_replies'),
+  ('Project discussions', 'project_discussions'), ('Offers', 'offers'),
+  ('Agreements', 'agreements'), ('Follow-up due', 'followups_due'), ('Errors', 'errors')
+] %}
+<div class="row g-3 mb-4">{% for label, key in cards %}<div class="col-6 col-md-4 col-xl-2"><section class="card border-0 shadow-sm h-100"><div class="card-body"><div class="text-secondary small">{{ label }}</div><div class="display-6 fw-semibold">{{ report.metrics[key] }}</div></div></section></div>{% endfor %}</div>
+
+<div class="row g-4 mb-4">
+  <div class="col-xl-7"><section class="card border-0 shadow-sm h-100"><div class="card-body"><h2 class="h5">Opportunity funnel</h2>{% for stage in report.funnel %}<div class="row align-items-center g-2 mb-2"><div class="col-4 small">{{ stage.label }}</div><div class="col-7"><div class="progress" role="progressbar" aria-label="{{ stage.label }}" aria-valuenow="{{ stage.companies }}" aria-valuemin="0" aria-valuemax="{{ max_funnel }}"><div class="progress-bar" style="width: {{ (stage.companies * 100 / max_funnel) if max_funnel else 0 }}%"></div></div></div><div class="col-1 text-end fw-semibold">{{ stage.companies }}</div></div>{% endfor %}</div></section></div>
+  <div class="col-xl-5"><section class="card border-0 shadow-sm h-100"><div class="card-body"><h2 class="h5">Скорость процесса</h2><p class="display-5 mb-1">{{ report.metrics.average_hours_to_current_stage }} h</p><p class="text-secondary">Среднее время от добавления до текущей стадии для обработанных компаний.</p><dl class="row small mb-0"><dt class="col-8">Добавлено сегодня</dt><dd class="col-4 text-end">{{ report.metrics.companies_added_today }}</dd><dt class="col-8">Обработано сегодня</dt><dd class="col-4 text-end">{{ report.metrics.companies_processed_today }}</dd><dt class="col-8">Drafts blocked</dt><dd class="col-4 text-end">{{ report.metrics.drafts_blocked }}</dd><dt class="col-8">Delivery failed</dt><dd class="col-4 text-end">{{ report.metrics.delivery_failed }}</dd></dl></div></section></div>
+</div>
+
+<section class="card border-0 shadow-sm mb-4"><div class="card-body"><h2 class="h5">Breakdowns</h2><div class="row g-4">{% for dimension in ['opportunity_type','positioning_strategy','vacancy','collaboration_format','workplace_format','pipeline_status','outcome'] %}<div class="col-md-6 col-xl-4"><h3 class="h6 text-secondary">{{ dimension }}</h3>{% for item in report.breakdowns.get(dimension, [])[:8] %}<div class="d-flex justify-content-between border-bottom py-1"><span>{{ item.key }}</span><strong>{{ item.companies }}</strong></div>{% else %}<span class="small text-secondary">Нет данных</span>{% endfor %}</div>{% endfor %}</div></div></section>
+
+<section class="card border-0 shadow-sm" id="portfolio"><div class="card-body"><div class="d-flex justify-content-between"><h2 class="h5">Opportunity portfolio</h2><span class="badge text-bg-light">{{ report.portfolio|length }} companies</span></div><div class="table-responsive"><table class="table table-hover align-middle"><thead><tr><th>Company</th><th>Score / types</th><th>Positioning / format</th><th>Vacancy</th><th>Contact</th><th>Pipeline / outcome</th><th>Delivery</th><th>Next action</th></tr></thead><tbody>{% for item in report.portfolio %}<tr><td><a href="/companies/{{ item.id }}">{{ item.name }}</a><small class="d-block text-secondary">{{ item.country or '—' }} · {{ item.company_size or 'size n/a' }} · {{ item.maturity_stage or 'maturity n/a' }}</small></td><td><strong>{{ item.overall_score if item.overall_score is not none else '—' }}</strong><small class="d-block text-secondary">{{ item.opportunity_types|join(', ') or 'none' }}</small></td><td>{{ item.positioning_strategy or '—' }}<small class="d-block text-secondary">{{ item.collaboration_formats|join(', ') or '—' }} / {{ item.workplace_formats|join(', ') or '—' }}</small></td><td><span class="badge text-bg-{{ 'success' if item.has_active_vacancy else 'light' }}">{{ 'yes' if item.has_active_vacancy else 'no' }}</span></td><td>{{ item.verified_contacts }} verified<small class="d-block text-secondary">{{ item.primary_decision_maker_role or 'role n/a' }}</small></td><td><span class="badge text-bg-primary">{{ item.pipeline_status }}</span>{% if item.outcome %}<small class="d-block text-success">{{ item.outcome }}</small>{% endif %}</td><td>{{ item.real_messages }} real<small class="d-block text-secondary">{{ item.drafts }} drafts · FU {{ item.followup_status or '—' }}</small></td><td class="small">{{ item.next_action or '—' }}</td></tr>{% else %}<tr><td colspan="8" class="text-secondary text-center py-4">Нет компаний для выбранных фильтров.</td></tr>{% endfor %}</tbody></table></div></div></section>
+{% endblock %}

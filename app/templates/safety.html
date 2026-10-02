@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% set ru = request.state.dashboard_locale == 'ru' %}
+{% block title %}{{ 'Центр безопасности' if ru else 'Safety Control Center' }} · AI Outreach System{% endblock %}
+{% block content %}
+<div class="mb-4">
+  <a href="/settings" class="text-decoration-none">← {{ 'Настройки' if ru else 'Settings' }}</a>
+  <h1 class="h2 mt-2">{{ 'Центр безопасности' if ru else 'Safety Control Center' }}</h1>
+  <p class="text-secondary">{{ 'Здесь владелец управляет действиями, которые могут передать данные за пределы системы.' if ru else 'Owner controls actions that can transmit data outside the system.' }}</p>
+</div>
+{% set status = request.query_params.get('status') %}
+{% if status == 'enabled' %}<div class="alert alert-success">{{ 'Реальная отправка включена. Каждое письмо всё равно требует отдельного ручного подтверждения.' if ru else 'Real sending enabled. Every email still requires separate manual approval.' }}</div>{% endif %}
+{% if status == 'disabled' %}<div class="alert alert-success">{{ 'Реальная отправка отключена.' if ru else 'Real sending disabled.' }}</div>{% endif %}
+{% if status == 'capability_unavailable' %}<div class="alert alert-warning">{{ 'Серверная возможность пока не активирована. Отправка остаётся заблокированной.' if ru else 'Server capability is not active. Sending remains blocked.' }}</div>{% endif %}
+{% if status == 'gmail_required' %}<div class="alert alert-danger">{{ 'Сначала подключите Gmail.' if ru else 'Connect Gmail first.' }}</div>{% endif %}
+{% if status == 'password_invalid' %}<div class="alert alert-danger">{{ 'Неверный текущий пароль.' if ru else 'Current password is incorrect.' }}</div>{% endif %}
+{% if status == 'confirmation_invalid' %}<div class="alert alert-danger">{{ 'Подтверждение заполнено неверно.' if ru else 'Confirmation is incomplete.' }}</div>{% endif %}
+
+<div class="row g-4">
+  <div class="col-lg-7">
+    <section class="card shadow-sm border-0"><div class="card-body p-4">
+      <div class="d-flex justify-content-between align-items-start gap-3">
+        <div><h2 class="h5">{{ 'Реальная внешняя отправка' if ru else 'Real external sending' }}</h2><p class="text-secondary small">{{ 'Разрешает только ручную отправку подтверждённого письма через подключённый Gmail.' if ru else 'Allows only manual delivery of an approved email through connected Gmail.' }}</p></div>
+        <span class="badge {{ 'text-bg-danger' if real_send_enabled else 'text-bg-success' }}">{{ ('ВКЛЮЧЕНО' if real_send_enabled else 'ОТКЛЮЧЕНО') if ru else ('ON' if real_send_enabled else 'OFF') }}</span>
+      </div>
+      <ul class="small">
+        <li>{{ 'Gmail: подключён' if gmail_connected and ru else ('Gmail: connected' if gmail_connected else ('Gmail: не подключён' if ru else 'Gmail: not connected')) }}</li>
+        <li>{{ 'Серверный барьер: готов' if deployment_capable and ru else ('Server gate: ready' if deployment_capable else ('Серверный барьер: закрыт' if ru else 'Server gate: closed')) }}</li>
+        <li>{{ 'Автоматическая отправка не включается этим действием.' if ru else 'This action never enables automatic sending.' }}</li>
+      </ul>
+      {% if real_send_enabled %}
+      <form method="post" action="/settings/safety/real-send/disable" onsubmit="return confirm('{{ 'Немедленно отключить реальную отправку?' if ru else 'Disable real sending immediately?' }}')">
+        <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
+        <button class="btn btn-danger">{{ 'Отключить сейчас' if ru else 'Disable now' }}</button>
+      </form>
+      {% else %}
+      <form method="post" action="/settings/safety/real-send/enable" class="vstack gap-3">
+        <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
+        <div><label class="form-label">{{ 'Текущий пароль' if ru else 'Current password' }}</label><input class="form-control" type="password" name="current_password" required autocomplete="current-password"></div>
+        <div><label class="form-label">{{ 'Введите' if ru else 'Type' }} <code>{{ confirmation_phrase }}</code></label><input class="form-control" name="confirmation_phrase" required autocomplete="off"></div>
+        <div class="form-check"><input class="form-check-input" type="checkbox" value="yes" name="risk_acknowledged" id="risk_acknowledged" required><label class="form-check-label" for="risk_acknowledged">{{ 'Я понимаю: адресату будут переданы текст письма, мой разрешённый профиль и разрешённые контакты.' if ru else 'I understand the recipient receives the email text, permitted profile facts and permitted contacts.' }}</label></div>
+        <button class="btn btn-outline-danger" {% if not gmail_connected or not deployment_capable %}disabled{% endif %}>{{ 'Включить ручную реальную отправку' if ru else 'Enable manual real sending' }}</button>
+      </form>
+      {% endif %}
+    </div></section>
+  </div>
+  <div class="col-lg-5">
+    <section class="card shadow-sm border-0 mb-4"><div class="card-body p-4"><div class="d-flex justify-content-between"><h2 class="h5">{{ 'Автоматическая отправка' if ru else 'Automatic sending' }}</h2><span class="badge text-bg-dark">{{ 'ЗАБЛОКИРОВАНО' if ru else 'LOCKED' }}</span></div><p class="small text-secondary mb-0">{{ 'На текущем этапе включить её невозможно.' if ru else 'It cannot be enabled at this stage.' }}</p></div></section>
+    <section class="card shadow-sm border-0"><div class="card-body p-4"><div class="d-flex justify-content-between"><h2 class="h5">{{ 'Публикация данных' if ru else 'Data publication' }}</h2><span class="badge text-bg-success">{{ 'ГЛОБАЛЬНО ОТКЛЮЧЕНО' if ru else 'GLOBALLY OFF' }}</span></div><p class="small text-secondary">{{ 'Разрешения задаются отдельно для каждого факта и контакта. Общего опасного переключателя нет.' if ru else 'Permissions are managed per fact and contact. There is no dangerous global switch.' }}</p><a class="btn btn-outline-primary" href="/candidate-profile#facts">{{ 'Управлять разрешениями профиля' if ru else 'Manage profile permissions' }}</a></div></section>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% set ru = request.state.dashboard_locale == 'ru' %}
+{% block title %}{{ 'Подобранные компании' if ru else 'Selected companies' }} · Single Outreach{% endblock %}
+{% block content %}
+<header class="inbox-header mb-4">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+    <h1 class="h2">{{ campaign.name if campaign else ('Подобранные компании' if ru else 'Selected companies') }}</h1>
+    <div class="d-flex gap-3"><a href="/campaigns">{{ 'Кампании' if ru else 'Campaigns' }}</a><a href="/search-history">{{ 'История поиска' if ru else 'Search history' }}</a></div>
+  </div>
+  {% if campaign %}<p>{{ campaign.goal }}</p>{% else %}
+  <form method="post" action="/search-tasks" class="search-task-form">
+    <div class="search-bar-shell">
+      <label class="visually-hidden" for="company-search-query">{{ 'Что найти?' if ru else 'What to find?' }}</label>
+      <textarea id="company-search-query" required minlength="3" maxlength="4000" rows="1" name="original_query" class="form-control search-query" placeholder="{{ 'Что найти?' if ru else 'What to find?' }}"></textarea>
+      <input type="hidden" name="result_limit" value="5"><button type="submit" class="btn btn-primary">{{ 'Найти' if ru else 'Search' }}</button>
+    </div>
+    <p class="small text-secondary mt-2">{{ 'Можно указать отрасль, страну или сайт компании.' if ru else 'Enter an industry, country, or company website.' }}</p>
+  </form>
+  {% endif %}
+  <p class="small text-secondary">{{ 'Подходящих компаний' if ru else 'Evidence-backed companies' }}: {{ company_cards|length }}{% if not campaign and daily_discovery.enabled %} · {{ 'Следующий ежедневный поиск' if ru else 'Next daily search' }}: {{ daily_discovery.next_at|local_dt }}{% endif %}</p>
+</header>
+{% if task_notice == 'started' %}<p role="status" class="alert alert-info">{{ 'Поиск запущен. Проверенные результаты появятся здесь; ход работы — в истории поиска.' if ru else 'Search started. Reviewed results will appear here; progress is available in search history.' }}</p>{% endif %}
+{% for card in company_cards %}{% set company = card.company %}{% set brief = card.brief %}
+<article class="company-inbox-card card border-0 shadow-sm mb-3"><div class="card-body p-4">
+  <div class="d-flex flex-wrap justify-content-between gap-2"><h2 class="h4">{{ company.name }}</h2><span class="small text-secondary">{{ brief.country }}</span></div>
+  <p>{{ brief.one_line }}</p>
+  <p class="mb-3"><strong>{{ 'Почему подходит:' if ru else 'Why it fits:' }}</strong> {{ brief.matches[0].explanation if brief.matches else '' }}</p>
+  <div class="d-flex flex-wrap gap-3 small text-secondary mb-3"><span>{% if brief.matches and brief.matches[0].state == 'ready_to_contact' %}{{ 'Готово к обращению' if ru else 'Ready to contact' }}{% else %}{{ 'Совпадение подтверждено — ищем контакт' if ru else 'Fit confirmed — find a contact' }}{% endif %}</span><span>{{ 'Контакт' if ru else 'Contact' }}: {{ card.readiness.primary_contact.name if card.readiness.primary_contact else ('ищем' if ru else 'researching') }}</span><time>{{ company.last_researched_at|local_dt }}</time></div>
+  <div class="d-flex flex-wrap gap-2"><form method="post" action="/companies/{{ company.id }}/open">{% if campaign %}<input type="hidden" name="campaign_id" value="{{ campaign.id }}">{% endif %}<button class="btn btn-primary">{{ 'Открыть компанию' if ru else 'Open company' }}</button></form>
+  {% if card.recommendation and card.recommendation.user_decision == 'pending' %}<form method="post" action="/companies/{{ company.id }}/recommendations/{{ card.recommendation.id }}/decision"><input type="hidden" name="version" value="{{ card.recommendation.version }}"><input type="hidden" name="decision" value="not_relevant"><button type="submit" class="btn btn-link">{{ 'Неинтересно' if ru else 'Not interested' }}</button></form>{% endif %}</div>
+</div></article>
+{% else %}<section class="empty-inbox"><h2 class="h5">{{ 'Подтверждённых совпадений пока нет' if ru else 'No evidence-backed matches yet' }}</h2><p class="text-secondary">{{ 'Сырые результаты не попадают в эту очередь. Система сначала проверяет факты компании и конкретную связь с подтверждённым опытом; контакт может быть найден позднее.' if ru else 'Incomplete results stay out of this inbox. The system first verifies company evidence and a concrete link to your proven experience; a contact can be found later.' }}</p></section>{% endfor %}
+{% endblock %}

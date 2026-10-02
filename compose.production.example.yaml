@@ -1,0 +1,166 @@
+name: ai-outreach-production
+
+# Planning template only. Do not run until STAGE_11_PRODUCTION_DECISION.md decisions are accepted.
+# It intentionally has no Mailpit, no real email and no public PostgreSQL port.
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      APP_ENVIRONMENT: production
+      APP_HOST: 0.0.0.0
+      APP_PORT: 8000
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:?required}:${POSTGRES_PASSWORD:?required}@postgres:5432/${POSTGRES_DB:-outreach}
+      DEMO_MODE: "false"
+      # Deployment capability only. OwnerSafetyPolicy is a separate fail-closed gate.
+      ALLOW_REAL_EMAIL: ${ALLOW_REAL_EMAIL:-false}
+      DELIVERY_OWNER_TOKEN: ${DELIVERY_OWNER_TOKEN:-}
+      ALLOW_PUBLICATION: "false"
+      ALLOW_EXTERNAL_EXPORT: "false"
+      AUTH_REQUIRED: "true"
+      AUTH_SESSION_MINUTES: ${AUTH_SESSION_MINUTES:-120}
+      AUTH_LOGIN_WINDOW_MINUTES: ${AUTH_LOGIN_WINDOW_MINUTES:-15}
+      AUTH_LOGIN_MAX_ATTEMPTS: ${AUTH_LOGIN_MAX_ATTEMPTS:-5}
+      AUTH_COOKIE_SECURE: "true"
+      USER_TIMEZONE: ${USER_TIMEZONE:-Europe/Moscow}
+      SMTP_HOST: disabled.invalid
+      SMTP_PORT: 1025
+      SMTP_USE_TLS: "false"
+      SMTP_FROM_EMAIL: no-send@example.invalid
+      SMTP_FROM_NAME: AI Outreach System
+      SMTP_TEST_RECIPIENT: disabled@example.invalid
+      SMTP_TEST_MODE: "false"
+      AI_REWRITE_PROVIDER: ${AI_REWRITE_PROVIDER:-unavailable}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_COMPANY_DISCOVERY_ENABLED: ${OPENAI_COMPANY_DISCOVERY_ENABLED:-false}
+      OPENAI_REWRITE_MODEL: ${OPENAI_REWRITE_MODEL:-gpt-5-mini}
+      ALLOW_OWNER_DATA_TO_AI: ${ALLOW_OWNER_DATA_TO_AI:-false}
+      EMAIL_DELIVERY_PROVIDER: ${EMAIL_DELIVERY_PROVIDER:-smtp}
+      GMAIL_OAUTH_ENABLED: ${GMAIL_OAUTH_ENABLED:-false}
+      GMAIL_OAUTH_CLIENT_ID: ${GMAIL_OAUTH_CLIENT_ID:-}
+      GMAIL_OAUTH_CLIENT_SECRET: ${GMAIL_OAUTH_CLIENT_SECRET:-}
+      GMAIL_OAUTH_REDIRECT_URI: ${GMAIL_OAUTH_REDIRECT_URI:-https://outreach.shaidigroup.com/auth/gmail/callback}
+      GMAIL_TOKEN_ENCRYPTION_KEY: ${GMAIL_TOKEN_ENCRYPTION_KEY:-}
+      GMAIL_SYNC_ENABLED: "false"
+      GMAIL_SYNC_INTERVAL_SECONDS: ${GMAIL_SYNC_INTERVAL_SECONDS:-60}
+      GMAIL_SYNC_BATCH_SIZE: ${GMAIL_SYNC_BATCH_SIZE:-25}
+      DAILY_DISCOVERY_ENABLED: "true"
+      DAILY_DISCOVERY_HOUR: ${DAILY_DISCOVERY_HOUR:-9}
+      DAILY_DISCOVERY_RESULT_LIMIT: ${DAILY_DISCOVERY_RESULT_LIMIT:-5}
+    command:
+      - sh
+      - -c
+      - >-
+        alembic upgrade head &&
+        uvicorn app.main:app --host 0.0.0.0 --port 8000
+        --proxy-headers --forwarded-allow-ips=${TRUSTED_PROXY_IPS:?required}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${APP_BIND_PORT:-8000}:8000"
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid,nodev
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://localhost:8000/api/v1/health/ready', timeout=3)
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      APP_ENVIRONMENT: production
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:?required}:${POSTGRES_PASSWORD:?required}@postgres:5432/${POSTGRES_DB:-outreach}
+      DEMO_MODE: "false"
+      ALLOW_REAL_EMAIL: "false"
+      ALLOW_PUBLICATION: "false"
+      ALLOW_EXTERNAL_EXPORT: "false"
+      AUTH_REQUIRED: "true"
+      AUTH_COOKIE_SECURE: "true"
+      USER_TIMEZONE: ${USER_TIMEZONE:-Europe/Moscow}
+      AI_REWRITE_PROVIDER: ${AI_REWRITE_PROVIDER:-unavailable}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_COMPANY_DISCOVERY_ENABLED: ${OPENAI_COMPANY_DISCOVERY_ENABLED:-false}
+      OPENAI_REWRITE_MODEL: ${OPENAI_REWRITE_MODEL:-gpt-5-mini}
+      ALLOW_OWNER_DATA_TO_AI: ${ALLOW_OWNER_DATA_TO_AI:-false}
+      EMAIL_DELIVERY_PROVIDER: ${EMAIL_DELIVERY_PROVIDER:-smtp}
+      GMAIL_OAUTH_ENABLED: ${GMAIL_OAUTH_ENABLED:-false}
+      GMAIL_OAUTH_CLIENT_ID: ${GMAIL_OAUTH_CLIENT_ID:-}
+      GMAIL_OAUTH_CLIENT_SECRET: ${GMAIL_OAUTH_CLIENT_SECRET:-}
+      GMAIL_OAUTH_REDIRECT_URI: ${GMAIL_OAUTH_REDIRECT_URI:-https://outreach.shaidigroup.com/auth/gmail/callback}
+      GMAIL_TOKEN_ENCRYPTION_KEY: ${GMAIL_TOKEN_ENCRYPTION_KEY:-}
+      GMAIL_SYNC_ENABLED: "false"
+      GMAIL_SYNC_INTERVAL_SECONDS: ${GMAIL_SYNC_INTERVAL_SECONDS:-60}
+      GMAIL_SYNC_BATCH_SIZE: ${GMAIL_SYNC_BATCH_SIZE:-25}
+      BACKGROUND_WORKER_POLL_SECONDS: ${BACKGROUND_WORKER_POLL_SECONDS:-5}
+      BACKGROUND_WORKER_MAX_ATTEMPTS: ${BACKGROUND_WORKER_MAX_ATTEMPTS:-3}
+      DAILY_DISCOVERY_ENABLED: "true"
+      DAILY_DISCOVERY_HOUR: ${DAILY_DISCOVERY_HOUR:-9}
+      DAILY_DISCOVERY_RESULT_LIMIT: ${DAILY_DISCOVERY_RESULT_LIMIT:-5}
+    command: ["python", "scripts/run_background_worker.py"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,noexec,nosuid,nodev
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import pathlib,time;
+          p=pathlib.Path('/tmp/ai-outreach-worker-heartbeat');
+          raise SystemExit(0 if p.exists() and time.time()-p.stat().st_mtime < 60 else 1)
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 15s
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-outreach}
+      POSTGRES_USER: ${POSTGRES_USER:?required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:

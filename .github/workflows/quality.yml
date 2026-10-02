@@ -1,0 +1,55 @@
+name: quality
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: outreach
+          POSTGRES_USER: outreach
+          POSTGRES_PASSWORD: outreach_ci_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U outreach -d outreach"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      APP_ENVIRONMENT: test
+      DEMO_MODE: "true"
+      ALLOW_REAL_EMAIL: "false"
+      DATABASE_URL: postgresql+asyncpg://outreach:outreach_ci_only@localhost:5432/outreach
+      USER_TIMEZONE: Europe/Moscow
+      AUTH_REQUIRED: "false"
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install
+        run: python -m pip install -e ".[dev]"
+      - name: Migrate
+        run: alembic upgrade head
+      - name: Ruff
+        run: ruff check app tests migrations scripts
+      - name: MyPy
+        run: mypy app
+      - name: Tests
+        run: pytest -q
+      - name: Verify schema head
+        run: |
+          current_revision="$(alembic current | awk '{print $1}')"
+          head_revision="$(alembic heads | awk '{print $1}')"
+          test "$current_revision" = "$head_revision"

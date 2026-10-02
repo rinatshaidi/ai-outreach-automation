@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% set ru = request.state.dashboard_locale == 'ru' %}
+{% set recommendation = recommendations[0] if recommendations else none %}
+{% block title %}{{ company.name }} · Single Outreach{% endblock %}
+{% block content %}
+<div class="opportunity-review company-workspace">
+  <div class="d-flex flex-wrap justify-content-between gap-2"><a href="/companies">← {{ 'Подобранные компании' if ru else 'Selected companies' }}</a>{% if owner_viewed_from_inbox %}<div><span class="badge text-bg-light border">{{ 'Просмотрено — ожидает решения' if ru else 'Reviewed — decision pending' }}</span><form method="post" action="/companies/{{ company.id }}/return-to-inbox" class="d-inline"><button class="btn btn-sm btn-link">{{ 'Вернуть в новые' if ru else 'Return to new' }}</button></form></div>{% endif %}</div>
+  {% if request.query_params.get('letter_notice') %}<p role="status" class="alert alert-success mt-3">{{ 'Действие сохранено. Письмо не отправлено.' if ru else 'Your action was saved. No message was sent.' }}</p>{% endif %}
+  {% set letter_error = request.query_params.get('letter_error') %}{% if letter_error %}<p role="alert" class="alert alert-warning mt-3">{% if letter_error == 'contact_not_found' %}{{ 'Выбранный контакт больше недоступен. Выберите подтверждённый канал ниже.' if ru else 'The selected contact is no longer available. Choose a verified channel below.' }}{% elif letter_error == 'opportunity_not_actionable' %}{{ 'Компания ещё не готова к письму: не хватает подтверждённого исследования, контакта или сценария.' if ru else 'This company is not ready for a message yet: verified research, a contact, or a scenario is missing.' }}{% elif letter_error == 'recommendation_not_found' %}{{ 'Рекомендация устарела. Обновите страницу и повторите действие.' if ru else 'The recommendation is outdated. Refresh the page and try again.' }}{% else %}{{ 'Действие не выполнено. Текст сохранён; обновите страницу и повторите попытку.' if ru else 'The action was not completed. Your text is preserved; refresh the page and try again.' }}{% endif %}</p>{% endif %}
+  {% if not brief.locale_validated %}<p class="alert alert-info mt-3">{{ 'Эта ранее сохранённая компания ещё не прошла обновлённую проверку качества. Её данные сохранены.' if ru else 'This previously saved company has not passed the updated quality review yet. Its data is preserved.' }}</p>{% endif %}
+  <section class="workspace-section mt-3" id="company">
+    <span class="eyebrow">{{ 'Компания' if ru else 'Company' }}</span>
+    <h1 class="h2 mt-2">{{ company.name }}</h1>
+    <div class="workspace-meta"><a href="https://{{ company.normalized_domain }}" target="_blank" rel="noreferrer">{{ 'Официальный сайт' if ru else 'Official website' }}</a>{% if brief.country %}<span>{{ brief.country }}</span>{% endif %}{% if brief.industry %}<span>{{ brief.industry }}</span>{% endif %}</div>
+    <p class="mt-3 mb-0">{{ brief.overview if brief.locale_validated else '' }}</p>
+    {% if brief.current_activity %}<details class="secondary-details"><summary>{{ 'Последние события' if ru else 'Recent developments' }}</summary><ul>{% for item in brief.current_activity %}<li>{{ item }}</li>{% endfor %}</ul></details>{% endif %}
+    <details class="secondary-details"><summary>{{ 'Источники' if ru else 'Sources' }} · {{ company.last_researched_at|local_dt }}</summary>{% for source in company.sources if source.http_status and 200 <= source.http_status < 300 and not source.error %}<div class="source-row"><a href="{{ source.url }}" target="_blank" rel="noreferrer">{{ source.url }}</a><time>{{ source.fetched_at|local_dt }}</time></div>{% endfor %}</details>
+  </section>
+  <section class="workspace-section" id="fit"><h2 class="h5">{{ 'Почему подходит' if ru else 'Why it fits' }}</h2>
+    {% set match = brief.primary_match or {} %}{% if match %}<article class="fit-reason">
+      <p><strong>{{ 'Контекст компании' if ru else 'Company context' }}</strong><br>{{ match.company_context }}{% if match.source_url %} <a href="{{ match.source_url }}" target="_blank" rel="noreferrer">{{ 'Источник' if ru else 'Source' }}</a>{% endif %}</p>
+      <p><strong>{{ 'Ваш релевантный опыт' if ru else 'Your relevant experience' }}</strong><br>{{ match.relevant_candidate_evidence }}</p>
+      <p><strong>{{ 'Пересечение' if ru else 'Intersection' }}</strong><br>{{ match.intersection }}</p>
+      <p class="mb-0"><strong>{{ 'Почему стоит написать' if ru else 'Why write' }}</strong><br>{{ match.outreach_angle }}</p>
+    </article>{% else %}<p>{{ 'В проверенных открытых источниках пока нет факта, который честно связывает потребность компании с вашим подтверждённым опытом. Не стоит выдавать такую компанию за готовое совпадение.' if ru else 'The checked public sources do not yet contain a fact that honestly links a company need to your verified experience. It should not be presented as a ready fit.' }}</p>{% endif %}
+  </section>
+  <section class="workspace-section" id="collaboration"><h2 class="h5">{{ 'Возможный формат' if ru else 'Possible collaboration' }}</h2>
+    {% if match %}<p>{{ match.value_hypothesis }}</p><p class="small text-secondary">{{ match.collaboration_format }}</p>{% endif %}
+  </section>
+  <section class="workspace-section" id="vacancy"><h2 class="h5">{{ 'Вакансия' if ru else 'Vacancy' }}</h2>
+    {% for job in brief.vacancies %}<article class="opportunity-row"><a href="{{ job.url }}" target="_blank" rel="noreferrer">{{ job.title }}</a><p>{{ job.summary }}</p>{% if job.requirements %}<details><summary>{{ 'Требования' if ru else 'Requirements' }}</summary><p>{{ job.requirements }}</p></details>{% endif %}</article>{% else %}<p>{{ 'Подходящая открытая вакансия в проверенных источниках не найдена. Возможен прямой разговор о вариантах сотрудничества выше.' if ru else 'No suitable open vacancy was found in the checked sources. Direct outreach about the options above may still be relevant.' }}</p>{% endfor %}
+  </section>
+  <section class="workspace-section" id="risks"><h2 class="h5">{{ 'Риски и ограничения' if ru else 'Risks and constraints' }}</h2>
+    {% for risk in (match.limitations if match else brief.risks) %}<p>{{ risk }}</p>{% else %}<p>{{ ('Существенных ограничений в проверенных источниках не обнаружено.' if brief.risk_reviewed else 'Проверка ограничений пока не завершена.') if ru else ('No material constraints were found in the checked sources.' if brief.risk_reviewed else 'Constraint review has not been completed yet.') }}</p>{% endfor %}
+  </section>
+  <section class="workspace-section" id="contacts"><h2 class="h5">{{ 'Куда написать' if ru else 'Where to write' }}</h2><div class="contacts-grid">
+    {% for route in preferred_contact_routes %}<article class="contact-card {{ 'primary-contact' if loop.first else '' }}"><strong>{{ route.contact.name if route.presentation.category == 'leadership' else route.presentation.role_label }}</strong>
+      <p class="small text-secondary">{{ 'Проверенный канал' if ru else 'Verified channel' }}</p>
+      <p class="small">{{ route.presentation.guidance }}</p>
+      <a class="btn btn-outline-primary btn-sm" href="{{ ('mailto:' ~ route.channel.value) if route.channel.channel_type == 'email' else (route.channel.url or route.channel.value) }}" target="_blank" rel="noreferrer">{{ {'email':('Написать по email' if ru else 'Email'), 'linkedin':'LinkedIn', 'telegram':'Telegram', 'facebook':'Facebook', 'official_form':('Открыть форму' if ru else 'Open form'), 'whatsapp':'WhatsApp'}.get(route.channel.channel_type, ('Открыть канал' if ru else 'Open channel')) }}</a>
+    </article>{% else %}<p>{{ 'Подтверждённого канала для обращения пока нет.' if ru else 'No verified outreach channel has been found yet.' }}</p>{% endfor %}</div>
+  </section>
+  {% include "partials/four_letters.html" %}
+  <details class="secondary-details mb-4"><summary>{{ 'История и дополнительные сведения' if ru else 'History and additional details' }}</summary><a href="/companies/{{ company.id }}?view=technical">{{ 'Открыть подробную запись' if ru else 'Open detailed record' }}</a></details>
+</div>
+<script src="/static/js/company-workspace.js" defer></script>
+{% endblock %}

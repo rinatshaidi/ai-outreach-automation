@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block title %}Предпросмотр профиля · AI Outreach System{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+  <div>
+    <h1 class="h2 mb-1">Предпросмотр Candidate Profile</h1>
+    <p class="text-secondary mb-0">{{ batch.source_filename }} · {{ batch.status }}</p>
+  </div>
+  <a class="btn btn-outline-secondary" href="/candidate-profile#import">Назад к профилю</a>
+</div>
+
+<div class="alert alert-warning">
+  Сейчас показаны только предложения. Ничего не импортировано, VERIFIED не меняется, разрешения
+  для AI, scoring, писем, подписи и публикации выключены.
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-3"><div class="card h-100 border-primary"><div class="card-body">
+    <span class="badge text-bg-primary mb-2">1 · текущий шаг</span>
+    <h2 class="h6">Предпросмотр</h2><p class="small mb-0">Откройте каждый из 23 блоков и прочитайте предложения.</p>
+  </div></div></div>
+  <div class="col-md-3"><div class="card h-100"><div class="card-body">
+    <span class="badge text-bg-light mb-2">2</span>
+    <h2 class="h6">Проверка структуры</h2><p class="small mb-0">Validation ничего не импортирует, а только включает решения.</p>
+  </div></div></div>
+  <div class="col-md-3"><div class="card h-100"><div class="card-body">
+    <span class="badge text-bg-light mb-2">3</span>
+    <h2 class="h6">Ваши решения</h2><p class="small mb-0">Подтвердить, отложить или отклонить каждый смысловой блок.</p>
+  </div></div></div>
+  <div class="col-md-3"><div class="card h-100"><div class="card-body">
+    <span class="badge text-bg-light mb-2">4 · отдельно</span>
+    <h2 class="h6">Фактический импорт</h2><p class="small mb-0">Отдельная последняя кнопка; сейчас её нажимать не нужно.</p>
+  </div></div></div>
+</div>
+
+<section class="card border-0 shadow-sm mb-4"><div class="card-body p-4">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+    <div>
+      <h2 class="h5 mb-1">Состояние проверки</h2>
+      <p class="text-secondary small mb-0">
+        Предложений: {{ batch.validation_report['items'] }} · ошибок: {{ batch.validation_report['invalid'] }} ·
+        exact conflicts: {{ batch.validation_report['conflicts'] }}
+      </p>
+    </div>
+    {% if batch.status == 'preview_ready' %}
+      <form method="post" action="/candidate-profile/imports/{{ batch.id }}/validate">
+        <button class="btn btn-primary">Проверить структуру — без импорта</button>
+      </form>
+    {% elif batch.status == 'review_required' %}
+      <span class="badge text-bg-success fs-6">Структура проверена · решения активны</span>
+    {% else %}
+      <span class="badge text-bg-secondary fs-6">{{ batch.status }}</span>
+    {% endif %}
+  </div>
+</div></section>
+
+<div class="d-grid gap-3">
+{% for group in section_groups %}
+  <details class="card border-0 shadow-sm" id="section-{{ group.type }}" {% if group.number == 1 %}open{% endif %}>
+    <summary class="card-header bg-white p-3 d-flex justify-content-between align-items-center gap-3" style="cursor:pointer">
+      <span><strong>{{ group.number }}. {{ group.label }}</strong><small class="d-block text-secondary">{{ group.type }}</small></span>
+      {% if group.entries %}<span class="badge text-bg-light">{{ group.entries | length }} предлож.</span>{% else %}<span class="badge text-bg-warning">нужны данные</span>{% endif %}
+    </summary>
+    <div class="card-body p-4">
+      {% if not group.entries %}
+        <div class="alert alert-light border mb-0">
+          В источнике недостаточно точных данных для создания записи. Блок остаётся REVIEW_REQUIRED.
+          Для контактов нужны точные URL/значения и отдельные permissions.
+        </div>
+      {% else %}
+        {% for item in group.entries %}
+          <article class="border rounded-3 p-3 mb-3">
+            <div class="d-flex flex-wrap justify-content-between gap-2 mb-2">
+              <div>
+                <span class="badge text-bg-light me-1">{{ item.target_entity_type }}</span>
+                <span class="badge text-bg-secondary">{{ item.operation }} / {{ item.decision }}</span>
+              </div>
+              <small class="text-secondary">VERIFIED=false · downstream permissions=false</small>
+            </div>
+            {% if item.target_entity_type == 'fact' %}
+              <p class="mb-1"><strong>{{ item.proposed_data.text }}</strong></p>
+              {% if item.proposed_data.evidence %}<p class="small text-secondary mb-0">Основание/ограничение: {{ item.proposed_data.evidence }}</p>{% endif %}
+            {% elif item.target_entity_type == 'skill' %}
+              <p class="mb-1"><strong>{{ item.proposed_data.name }}</strong> · уровень: {{ item.proposed_data.actual_level }}</p>
+              {% if item.proposed_data.evidence %}<p class="small mb-1">Evidence: {{ item.proposed_data.evidence }}</p>{% endif %}
+              {% if item.proposed_data.limitations %}<p class="small text-secondary mb-0">Ограничения: {{ item.proposed_data.limitations }}</p>{% endif %}
+            {% elif item.target_entity_type == 'strength' %}
+              <p class="mb-1"><strong>{{ item.proposed_data.text }}</strong></p>
+              {% if item.proposed_data.evidence %}<p class="small text-secondary mb-0">Evidence: {{ item.proposed_data.evidence }}</p>{% endif %}
+            {% elif item.target_entity_type == 'experience' %}
+              <p class="mb-1"><strong>{{ item.proposed_data.position }}</strong>{% if item.proposed_data.industry %} · {{ item.proposed_data.industry }}{% endif %}</p>
+              <p class="small text-secondary mb-0">{{ item.proposed_data.responsibility_level }}{% if item.proposed_data.crisis_or_complex_situations %} — {{ item.proposed_data.crisis_or_complex_situations }}{% endif %}</p>
+            {% endif %}
+            {% if item.validation_messages %}<ul class="text-warning small mt-2 mb-0">{% for message in item.validation_messages %}<li>{{ message }}</li>{% endfor %}</ul>{% endif %}
+            <details class="mt-2"><summary class="small text-secondary">Показать технические поля</summary>
+              <div class="row g-3 mt-1"><div class="col-md-6"><h3 class="h6">Сейчас</h3><pre class="small bg-body-tertiary p-2">{{ item.current_data_snapshot | prettyjson }}</pre></div><div class="col-md-6"><h3 class="h6">Предлагается</h3><pre class="small bg-body-tertiary p-2">{{ item.proposed_data | prettyjson }}</pre></div></div>
+            </details>
+            {% if batch.status == 'review_required' %}
+              <form method="post" action="/candidate-profile/imports/{{ batch.id }}/items/{{ item.id }}/decision" class="d-flex flex-wrap gap-2 mt-3">
+                <input type="hidden" name="version" value="{{ item.version }}">
+                <button class="btn btn-sm btn-outline-primary" name="decision" value="approved" {% if item.operation in ['conflict','skipped'] %}disabled{% endif %}>Подтвердить запись</button>
+                <button class="btn btn-sm btn-outline-warning" name="decision" value="deferred">Отложить</button>
+                <button class="btn btn-sm btn-outline-danger" name="decision" value="rejected">Отклонить</button>
+              </form>
+            {% endif %}
+          </article>
+        {% endfor %}
+
+        {% if batch.status == 'review_required' %}
+          <form method="post" action="/candidate-profile/imports/{{ batch.id }}/sections/{{ group.type }}/decision" class="border-top pt-3 d-flex flex-wrap gap-2">
+            <strong class="me-auto">Решение сразу по всему блоку:</strong>
+            <button class="btn btn-primary" name="decision" value="approved">Подтвердить блок</button>
+            <button class="btn btn-outline-warning" name="decision" value="deferred">Отложить блок</button>
+            <button class="btn btn-outline-danger" name="decision" value="rejected">Отклонить блок</button>
+          </form>
+        {% else %}
+          <p class="small text-secondary mb-0">Решения станут доступны после безопасной проверки структуры.</p>
+        {% endif %}
+      {% endif %}
+    </div>
+  </details>
+{% endfor %}
+</div>
+
+<section class="card border-danger mt-4"><div class="card-body p-4">
+  <h2 class="h5 text-danger">Фактический импорт — отдельный последний шаг</h2>
+  <p class="small">Осталось решений pending: <strong>{{ pending_count }}</strong> · подтверждено записей: <strong>{{ approved_count }}</strong>. Кнопка заблокирована, пока не рассмотрены все предложения. Даже после импорта записи останутся VERIFIED=false и без downstream permissions.</p>
+  <form method="post" action="/candidate-profile/imports/{{ batch.id }}/apply">
+    <button class="btn btn-danger" {% if batch.status not in ['review_required','partially_applied'] or pending_count > 0 or approved_count == 0 %}disabled{% endif %}>Импортировать только подтверждённые записи</button>
+  </form>
+</div></section>
+{% endblock %}

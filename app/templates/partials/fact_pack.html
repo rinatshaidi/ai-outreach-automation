@@ -1,0 +1,7 @@
+<div class="row g-3">
+  <div class="col-md-4"><div class="border rounded p-3 h-100"><strong>Разрешённые факты: {{ pack.facts | length }}</strong>{% for fact in pack.facts %}<p class="small mb-1 mt-2">{{ fact.fact_type }}: {{ fact.text }}</p>{% endfor %}</div></div>
+  <div class="col-md-4"><div class="border rounded p-3 h-100"><strong>Разрешённые контакты: {{ pack.contacts | length }}</strong>{% for contact in pack.contacts %}<p class="small mb-1 mt-2">{{ contact.contact_type }}: {{ contact.value }}</p>{% endfor %}</div></div>
+  <div class="col-md-4"><div class="border rounded p-3 h-100"><strong>Активные правила: {{ pack.rules | length }}</strong>{% for rule in pack.rules %}<p class="small mb-1 mt-2">{{ rule.severity }}: {{ rule.text }}</p>{% endfor %}</div></div>
+</div>
+<p class="small text-secondary mt-3 mb-0">Purpose: {{ pack.purpose.value }} · Profile version: {{ pack.profile_version }} · Исключено фактов: {{ pack.excluded_fact_ids | length }} · контактов: {{ pack.excluded_contact_ids | length }}</p>
+

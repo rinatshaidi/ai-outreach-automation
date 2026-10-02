@@ -1,0 +1,1 @@
+"""Opportunity-first domain contracts."""

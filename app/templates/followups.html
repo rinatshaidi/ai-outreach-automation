@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Follow-ups · AI Outreach System{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div><h1 class="h3 mb-1">Follow-ups</h1><p class="text-secondary mb-0">Предложения создаются по сроку, но никогда не отправляются автоматически.</p></div>
+  <form method="post" action="/followups/refresh"><button class="btn btn-primary">Обновить due proposals</button></form>
+</div>
+<section class="card border-0 shadow-sm mb-4"><div class="card-body">
+  <h2 class="h5">Зарегистрировать ответ вручную</h2>
+  <form method="post" action="/followups/manual-reply" class="row g-2">
+    <div class="col-md-3"><select required name="company_id" class="form-select"><option value="">Компания</option>{% for company in companies.values() %}<option value="{{ company.id }}">{{ company.name }}</option>{% endfor %}</select></div>
+    <div class="col-md-3"><select required name="contact_id" class="form-select"><option value="">Контакт</option>{% for contact in contacts.values() %}<option value="{{ contact.id }}">{{ contact.name }} · {{ companies[contact.company_id].name }}</option>{% endfor %}</select></div>
+    <div class="col-md-2"><select required name="outcome" class="form-select">{% for outcome in outcomes %}<option value="{{ outcome.value }}">{{ outcome.value }}</option>{% endfor %}</select></div>
+    <div class="col-md-3"><input required name="summary" class="form-control" maxlength="500" placeholder="Краткое содержание без лишних PII"></div>
+    <div class="col-md-1"><button class="btn btn-success w-100">Save</button></div>
+  </form>
+</div></section>
+<div class="row g-3">
+{% for item in followups %}
+  <div class="col-xl-6"><article class="card border-0 shadow-sm h-100"><div class="card-body">
+    <div class="d-flex justify-content-between"><h2 class="h5">{{ companies[item.company_id].name }}</h2><span class="badge text-bg-{{ 'warning' if item.status in ['planned','due','draft_ready','deferred'] else 'success' if item.status == 'approved' else 'secondary' }}">{{ item.status }}</span></div>
+    <div class="small text-secondary mb-2">{{ contacts[item.contact_id].name }} · due {{ item.due_at }} · {{ item.timezone }}</div>
+    {% if item.subject %}<div class="fw-semibold">{{ item.subject }}</div><div class="border rounded bg-body-tertiary p-2 my-2" style="white-space: pre-wrap">{{ item.body }}</div>{% endif %}
+    {% if item.validation_report %}<div class="small mb-2">Validator: {{ 'passed' if item.validation_report.get('passed') else 'blocked' }} · automatic send: disabled</div>{% endif %}
+    {% if item.status == 'draft_ready' %}<div class="d-flex gap-2"><form method="post" action="/followups/{{ item.id }}/decision/approve"><input type="hidden" name="version" value="{{ item.version }}"><button class="btn btn-success btn-sm">Approve exact proposal</button></form><form method="post" action="/followups/{{ item.id }}/decision/reject"><input type="hidden" name="version" value="{{ item.version }}"><button class="btn btn-outline-danger btn-sm">Reject</button></form></div>{% endif %}
+    {% if item.status in ['planned','due','draft_ready','deferred','approved'] %}<div class="d-flex gap-2 mt-2"><form method="post" action="/followups/{{ item.id }}/decision/cancel"><input type="hidden" name="version" value="{{ item.version }}"><button class="btn btn-outline-secondary btn-sm">Cancel</button></form>{% if item.status != 'approved' %}<form method="post" action="/followups/{{ item.id }}/defer-until" class="d-flex gap-1"><input type="hidden" name="version" value="{{ item.version }}"><input required type="datetime-local" name="due_at" class="form-control form-control-sm"><button class="btn btn-outline-warning btn-sm">Defer</button></form>{% endif %}</div>{% endif %}
+    {% if item.cancellation_reason %}<div class="small text-secondary mt-2">Reason: {{ item.cancellation_reason }}</div>{% endif %}
+  </div></article></div>
+{% else %}<div class="col-12"><div class="alert alert-light border">Follow-up пока нет. Они планируются только после успешной реальной отправки.</div></div>{% endfor %}
+</div>
+{% endblock %}

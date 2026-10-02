@@ -1,0 +1,1 @@
+"""Safe company research domain."""

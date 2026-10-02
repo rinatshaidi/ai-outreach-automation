@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Campaigns · AI Outreach System{% endblock %}
+{% block content %}
+<div class="row g-4">
+  <div class="col-xl-8">
+    <h1 class="h2 mb-4">Campaigns</h1>
+    <section class="card border-0 shadow-sm"><div class="table-responsive"><table class="table align-middle mb-0"><thead><tr><th>Название</th><th>Цель</th><th>Opportunity / strategy</th><th>Язык</th><th>Лимит</th><th>Follow-up</th><th>Статус</th></tr></thead><tbody>
+    {% for campaign in campaigns %}<tr><td class="fw-semibold">{{ campaign.name }}</td><td>{{ campaign.goal }}</td><td>{{ campaign.opportunity_types | join(', ') or '—' }}<small class="d-block text-secondary">{{ campaign.positioning_strategies | join(', ') }}</small></td><td>{{ campaign.preferred_language }}</td><td>{{ campaign.daily_limit }}/день</td><td>{{ campaign.followup_policy.get('interval_business_days', 7) }} рабочих дней<small class="d-block text-secondary">только suggestion, без auto-send</small></td><td><span class="badge status-badge">{{ campaign.status }}</span></td></tr>{% else %}<tr><td colspan="7" class="text-center text-secondary py-5">Кампаний пока нет.</td></tr>{% endfor %}
+    </tbody></table></div></section>
+  </div>
+  <div class="col-xl-4"><section class="card border-0 shadow-sm crm-form"><div class="card-body p-4"><h2 class="h5">Новая кампания</h2><form method="post" action="/campaigns" class="vstack gap-3">
+    <label class="form-label">Название<input required name="name" class="form-control"></label>
+    <label class="form-label">Цель<textarea required name="goal" class="form-control" rows="3"></textarea></label>
+    <label class="form-label">Opportunity types<input name="opportunity_types" class="form-control" placeholder="market_entry, project_work"></label>
+    <label class="form-label">Positioning strategies<input name="positioning_strategies" class="form-control" placeholder="business_first, hybrid"></label>
+    <label class="form-label">Collaboration formats<input name="collaboration_formats" class="form-control" placeholder="full_time, project_based"></label>
+    <label class="form-label">Язык<input name="preferred_language" value="auto" class="form-control"></label>
+    <label class="form-label">Тон<select name="tone_defaults" class="form-select">{% for tone in campaign_tones %}<option value="{{ tone.value }}">{{ tone.value }}</option>{% endfor %}</select></label>
+    <label class="form-label">Дневной лимит<input type="number" min="0" max="500" name="daily_limit" value="10" class="form-control"></label>
+    <label class="form-label">Follow-up через рабочих дней<input type="number" min="1" max="60" name="followup_interval_business_days" value="7" class="form-control"></label>
+    <label class="form-label">Максимум follow-ups<input type="number" min="0" max="5" name="max_followups" value="1" class="form-control"></label>
+    <label class="form-label">Статус<select name="status" class="form-select">{% for status in campaign_statuses %}<option value="{{ status.value }}">{{ status.value }}</option>{% endfor %}</select></label>
+    <button class="btn btn-primary">Создать</button>
+  </form></div></section></div>
+</div>
+{% endblock %}

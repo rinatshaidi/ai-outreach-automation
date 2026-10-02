@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Вход · AI Outreach System{% endblock %}
+{% block content %}
+<div class="row justify-content-center py-5">
+  <div class="col-md-7 col-lg-5">
+    <section class="card border-0 shadow-sm">
+      <div class="card-body p-4 p-lg-5">
+        <h1 class="h3 mb-2">Вход владельца</h1>
+        <p class="text-secondary">Локальный single-owner Dashboard. Публичной регистрации нет.</p>
+        {% if not configured %}
+          <div class="alert alert-warning">Владелец ещё не создан. Выполните локальную команду <code>python scripts/create_owner.py</code>.</div>
+        {% endif %}
+        {% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
+        <form method="post" action="/auth/login" novalidate>
+          <input type="hidden" name="csrf_token" value="{{ login_csrf }}">
+          <input type="hidden" name="next_path" value="{{ next_path }}">
+          <label class="form-label" for="login_identifier">Логин</label>
+          <input class="form-control mb-3" id="login_identifier" name="login_identifier" autocomplete="username" required>
+          <label class="form-label" for="password">Пароль</label>
+          <input class="form-control mb-4" id="password" name="password" type="password" autocomplete="current-password" required>
+          <button class="btn btn-primary w-100" {% if not configured %}disabled{% endif %}>Войти</button>
+        </form>
+      </div>
+    </section>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,53 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+
+# Secrets and local configuration
+.env
+.env.*
+production.env
+*.production.env
+!.env.example
+*.pem
+*.key
+
+# Databases and generated data
+*.db
+*.sqlite*
+backups/
+postgres_data/
+data/
+!demo/synthetic_seed/
+
+# IDE and operating system
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+*.tar.gz
+*.tgz
+*.zip
+
+# Local deployment bundles and transient diagnostics
+artifacts/
+tmp/
+pytest-cache-files-*/
+
+# Logs and reports
+*.log
+reports/

@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% set ru = request.state.dashboard_locale == 'ru' %}
+{% block title %}{{ 'Центр проверки' if ru else 'Review Center' }} · AI Outreach System{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+  <div><h1 class="h3 mb-1">{{ 'Центр проверки' if ru else 'Review Center' }}</h1><p class="text-secondary mb-0">{{ 'Профессиональный и дружелюбный варианты показываются отдельно. Выбор варианта не отправляет письмо.' if ru else 'Professional and friendly variants are shown separately. Selecting a variant does not send a message.' }}</p></div>
+  <span class="badge text-bg-warning">{{ 'Локальный пилот · только Mailpit' if ru else 'Local Pilot · Mailpit only' }}</span>
+</div>
+<div class="row g-3">
+{% for draft in drafts %}
+  <div class="col-xl-6">
+    <article class="card border-0 shadow-sm h-100"><div class="card-body">
+      <div class="d-flex justify-content-between gap-2"><strong>{{ companies[draft.company_id].name }} · {{ ('Развёрнутое' if draft.message_format == 'expanded' else 'Короткое') if ru else draft.message_format|capitalize }} · {{ ('Профессиональный' if draft.tone == 'professional' else 'Дружелюбный') if ru else draft.tone|capitalize }}</strong><span class="badge {{ 'text-bg-success' if draft.status == 'ready' else 'text-bg-danger' }}">{{ draft.status|ui_status(request.state.dashboard_locale) }}</span></div>
+      <div class="small text-secondary">{{ 'Вариант' if ru else 'Variant' }} {{ draft.variant }} · {{ contacts[draft.contact_id].name }} · {{ 'версия' if ru else 'revision' }} {{ draft.revision }} · {{ draft.language }}</div>
+      <h2 class="h6 mt-3">{{ draft.subject }}</h2>
+      <p>{{ draft.body[:260] }}{% if draft.body|length > 260 %}…{% endif %}</p>
+      <a href="/review/{{ draft.id }}" class="btn btn-primary btn-sm">{{ 'Открыть вариант' if ru else 'Open variant' }}</a>
+    </div></article>
+  </div>
+{% else %}<p class="text-secondary">{{ 'Черновиков для проверки пока нет.' if ru else 'No drafts are awaiting review.' }}</p>{% endfor %}
+</div>
+{% endblock %}

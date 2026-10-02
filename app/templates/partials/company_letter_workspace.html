@@ -1,0 +1,73 @@
+<section id="letter" class="workspace-section letter-workspace">
+  <div class="section-heading">
+    <div><span class="eyebrow">{{ 'Письмо' if ru else 'Message' }}</span><h2>{{ 'Подготовка и решение' if ru else 'Draft and decision' }}</h2></div>
+    <span class="safety-note">{{ 'Ничего не отправляется без отдельного действия' if ru else 'Nothing is sent without a separate action' }}</span>
+  </div>
+
+  {% if not draft_matrix_complete %}
+    {% if recommendation and recommendation.user_decision in ['pending', 'outreach'] and opportunity_readiness.actionable and selectable_contacts %}
+      <form method="post" action="/companies/{{ company.id }}/prepare-letter" class="prepare-letter-panel mb-4">
+        <input type="hidden" name="recommendation_id" value="{{ recommendation.id }}">
+        <input type="hidden" name="version" value="{{ recommendation.version }}">
+        <label>{{ 'Основной контакт' if ru else 'Primary contact' }}
+          <select name="contact_id" class="form-select" required>{% for item in selectable_contacts %}{% set contact_info = contact_presentation.get(item.id) %}<option value="{{ item.id }}">{{ item.name }} · {{ contact_info.role_label if contact_info else (item.role or ('публичный канал' if ru else 'public channel')) }}</option>{% endfor %}</select>
+        </label>
+        <button class="btn btn-primary btn-lg">{{ 'Подготовить все варианты' if ru else 'Create all message variants' }}</button>
+        <p class="small text-secondary mb-0">{{ 'Создаст развёрнутое письмо и короткое сообщение в профессиональном и дружелюбном тоне. Ничего не отправит.' if ru else 'Creates an expanded email and a short message in professional and friendly tones. Sends nothing.' }}</p>
+      </form>
+    {% elif not latest_drafts_by_format_tone %}
+      <div class="empty-inline"><strong>{{ 'Сообщение пока недоступно.' if ru else 'A message is not ready yet.' }}</strong><ul class="mb-0 mt-2">{% for blocker in opportunity_readiness.blockers|ui_blockers(request.state.dashboard_locale) %}<li>{{ blocker }}</li>{% endfor %}</ul></div>
+    {% endif %}
+  {% endif %}
+
+  {% if latest_drafts_by_format_tone %}
+    {% set formats = [('expanded', ('Развёрнутое письмо' if ru else 'Expanded email')), ('short', ('Короткое сообщение' if ru else 'Short message'))] %}
+    {% set tones = [('professional', ('Профессиональный' if ru else 'Professional')), ('friendly', ('Дружелюбный' if ru else 'Friendly'))] %}
+    <ul class="nav nav-tabs letter-format-tabs" role="tablist">
+      {% for format_key, format_label in formats %}<li class="nav-item"><button class="nav-link {{ 'active' if loop.first else '' }}" data-bs-toggle="tab" data-bs-target="#format-{{ format_key }}" type="button">{{ format_label }}</button></li>{% endfor %}
+    </ul>
+    <div class="tab-content pt-4">
+      {% for format_key, format_label in formats %}
+        <div class="tab-pane fade {{ 'show active' if loop.first else '' }}" id="format-{{ format_key }}">
+          <div class="message-format-help mb-3">{% if format_key == 'expanded' %}{{ 'Для email: тема, полный контекст и отдельное подтверждение перед отправкой через Gmail.' if ru else 'For email: subject, full context, and a separate confirmation before Gmail delivery.' }}{% else %}{{ 'Для LinkedIn, VK, Facebook, Telegram и других социальных каналов: скопируйте и отправьте вручную.' if ru else 'For LinkedIn, VK, Facebook, Telegram, and other social channels: copy and send manually.' }}{% endif %}</div>
+          <ul class="nav nav-pills letter-tone-tabs mb-3" role="tablist">
+            {% for tone_key, tone_label in tones %}{% set candidate = latest_drafts_by_format_tone.get(format_key ~ ':' ~ tone_key) %}{% if candidate %}<li class="nav-item"><button class="nav-link {{ 'active' if loop.first else '' }}" data-bs-toggle="tab" data-bs-target="#draft-{{ candidate.id }}" type="button">{{ tone_label }}</button></li>{% endif %}{% endfor %}
+          </ul>
+          <div class="tab-content">
+            {% for tone_key, tone_label in tones %}
+              {% set draft = latest_drafts_by_format_tone.get(format_key ~ ':' ~ tone_key) %}
+              {% if draft %}
+                {% set approval = valid_approval_by_draft.get(draft.id) %}
+                {% set selected_contact = contacts_by_id.get(draft.contact_id) %}
+                <div class="tab-pane fade {{ 'show active' if loop.first else '' }}" id="draft-{{ draft.id }}">
+                  <div class="draft-meta"><span>{{ format_label }}</span><span>{{ 'Тон' if ru else 'Tone' }}: {{ tone_label }}</span><span>{{ 'Контакт' if ru else 'Contact' }}: {{ selected_contact.name if selected_contact else '—' }}</span><span>{{ 'Изменено' if ru else 'Updated' }} {{ draft.created_at|local_dt }}</span><span>{{ 'Версия' if ru else 'Version' }} {{ draft.revision }}</span><span>{{ draft.language|upper }}</span>{% if approval %}<span class="badge text-bg-success">{{ 'Подтверждено' if ru else 'Confirmed' }}</span>{% endif %}</div>
+                  <div class="row g-4">
+                    <div class="col-xl-8">
+                      <form method="post" action="/review/{{ draft.id }}/edit" class="draft-editor" data-single-submit>
+                        <input type="hidden" name="workspace" value="true"><input type="hidden" name="revision" value="{{ draft.revision }}">
+                        {% if draft.message_format == 'expanded' %}<label>{{ 'Тема' if ru else 'Subject' }}<input name="subject" class="form-control" maxlength="240" required value="{{ draft.subject }}"></label>{% else %}<input type="hidden" name="subject" value="{{ draft.subject }}">{% endif %}
+                        <label>{{ 'Текст письма' if draft.message_format == 'expanded' and ru else ('Email body' if draft.message_format == 'expanded' else ('Короткое сообщение' if ru else 'Short message')) }}<textarea id="draft-body-{{ draft.id }}" name="body" class="form-control" rows="{{ 14 if draft.message_format == 'expanded' else 7 }}" required>{{ draft.body }}</textarea></label>
+                        <div class="d-flex flex-wrap gap-2"><button class="btn btn-outline-primary">{{ 'Сохранить новую версию' if ru else 'Save new version' }}</button><button type="button" class="btn btn-primary" data-copy-draft="draft-body-{{ draft.id }}">{{ 'Скопировать письмо' if draft.message_format == 'expanded' and ru else ('Copy email' if draft.message_format == 'expanded' else ('Скопировать сообщение' if ru else 'Copy message')) }}</button></div>
+                      </form>
+                    </div>
+                    <div class="col-xl-4"><div class="letter-tools">
+                      {% if selectable_contacts|length > 1 %}<details class="secondary-details mb-3"><summary>{{ 'Сменить контакт' if ru else 'Change contact' }}</summary><form method="post" action="/review/{{ draft.id }}/recipient" class="mt-2"><input type="hidden" name="workspace" value="true"><input type="hidden" name="revision" value="{{ draft.revision }}"><input type="hidden" name="confirmed" value="true"><select name="contact_id" class="form-select">{% for item in selectable_contacts %}{% set contact_info = contact_presentation.get(item.id) %}<option value="{{ item.id }}" {{ 'selected' if item.id == draft.contact_id else '' }}>{{ item.name }} · {{ contact_info.role_label if contact_info else (item.role or '') }}</option>{% endfor %}</select><button class="btn btn-sm btn-outline-secondary">{{ 'Применить' if ru else 'Apply' }}</button></form></details>{% endif %}
+                      {% if draft.message_format == 'short' and selected_contact %}<div class="available-channels mb-3"><strong>{{ 'Доступные каналы' if ru else 'Available channels' }}</strong>{% for channel in selected_contact.channels if channel.validation_status != 'INVALID' and channel.channel_type != 'email' %}<a class="btn btn-sm btn-outline-primary" href="{{ channel.url or channel.value }}" target="_blank" rel="noreferrer">{{ 'Открыть' if ru else 'Open' }} {{ channel.channel_type|replace('_',' ')|capitalize }}</a>{% else %}<p class="small text-secondary mb-0">{{ 'Подтверждённый социальный канал не найден. Сообщение можно скопировать.' if ru else 'No verified social channel was found. You can still copy the message.' }}</p>{% endfor %}</div>{% endif %}
+                      <hr><form method="post" action="/review/{{ draft.id }}/regenerate" data-single-submit><input type="hidden" name="workspace" value="true"><input type="hidden" name="revision" value="{{ draft.revision }}"><label>{{ 'Задача для ИИ' if ru else 'Instruction for AI' }}<textarea name="campaign_goal" class="form-control" rows="4" required placeholder="{{ 'Например: сократи первый абзац и сделай тон теплее' if ru else 'Example: shorten the first paragraph and make the tone warmer' }}"></textarea></label><p class="small text-secondary">{{ 'Для самостоятельной правки измените текст слева и сохраните новую версию.' if ru else 'For a manual change, edit the text on the left and save a new version.' }}</p><label>{{ 'Язык результата' if ru else 'Output language' }}<select name="language" class="form-select"><option value="same">{{ 'Сохранить текущий' if ru else 'Keep current' }}</option><option value="ru">Русский</option><option value="en">English</option></select></label><button class="btn btn-primary w-100" data-pending-label="{{ 'ИИ изменяет…' if ru else 'AI is rewriting…' }}">{{ 'Изменить с помощью ИИ' if ru else 'Rewrite with AI' }}</button></form>
+                      {% if ai_rewrite_provider == 'unavailable' %}<p class="small text-warning mt-2">{{ 'AI provider сейчас недоступен; исходная версия останется без изменений.' if ru else 'AI provider is unavailable; the current version will remain unchanged.' }}</p>{% endif %}
+                    </div></div>
+                  </div>
+                  <details class="version-history mt-4"><summary>{{ 'История версий' if ru else 'Version history' }} · {{ draft_revisions_by_variant.get(draft.variant, [])|length }}</summary><div class="history-list">{% for item in draft_revisions_by_variant.get(draft.variant, []) %}{% set kind = revision_kinds.get(item.id|string, '') %}<article><div><strong>{{ 'Версия' if ru else 'Version' }} {{ item.revision }}</strong> · {% if kind == 'edited' %}{{ 'ручное изменение' if ru else 'manual edit' }}{% elif kind == 'ai_rewritten' %}{{ 'AI-переработка' if ru else 'AI rewrite' }}{% elif kind == 'restored' %}{{ 'восстановлено' if ru else 'restored' }}{% else %}{{ 'исходный вариант' if ru else 'initial draft' }}{% endif %}<span>{{ item.created_at|local_dt }}</span></div>{% if item.id != draft.id %}<form method="post" action="/review/{{ draft.id }}/restore"><input type="hidden" name="workspace" value="true"><input type="hidden" name="revision" value="{{ draft.revision }}"><input type="hidden" name="source_draft_id" value="{{ item.id }}"><button class="btn btn-sm btn-link">{{ 'Открыть как новую версию' if ru else 'Restore as new version' }}</button></form>{% else %}<span class="badge text-bg-primary">{{ 'Текущая' if ru else 'Current' }}</span>{% endif %}</article>{% endfor %}</div></details>
+                  <div class="owner-actions mt-4">
+                    {% if approval %}<div><strong>{{ 'Финальная версия подтверждена.' if ru else 'Final revision confirmed.' }}</strong>{% if draft.message_format == 'expanded' %}<p class="small mb-0">{% if gmail_connected and real_send_capable and real_send_enabled %}{{ 'Gmail готов, но отправка требует последнего отдельного подтверждения.' if ru else 'Gmail is ready, but delivery requires a final separate confirmation.' }}{% else %}{{ 'Прямая отправка через Gmail сейчас выключена. Компания ничего не получила.' if ru else 'Direct Gmail delivery is currently off. The company received nothing.' }}{% endif %}</p>{% else %}<p class="small mb-0">{{ 'Скопируйте сообщение, откройте доступный социальный канал и отправьте вручную.' if ru else 'Copy the message, open an available social channel, and send it manually.' }}</p>{% endif %}</div>{% else %}<form method="post" action="/review/{{ draft.id }}/approve" data-single-submit><input type="hidden" name="workspace" value="true"><input type="hidden" name="revision" value="{{ draft.revision }}"><button class="btn btn-success" data-pending-label="{{ 'Подтверждаем…' if ru else 'Confirming…' }}" {{ 'disabled' if draft.status != 'ready' else '' }}>{{ 'Подтвердить письмо' if draft.message_format == 'expanded' and ru else ('Confirm email' if draft.message_format == 'expanded' else ('Подтвердить сообщение' if ru else 'Confirm message')) }}</button></form>{% endif %}
+                    <form method="post" action="/review/{{ draft.id }}/defer" data-single-submit><input type="hidden" name="workspace" value="true"><input type="hidden" name="revision" value="{{ draft.revision }}"><button class="btn btn-outline-warning" data-pending-label="{{ 'Откладываем…' if ru else 'Deferring…' }}">{{ 'Отложить' if ru else 'Defer' }}</button></form><form method="post" action="/review/{{ draft.id }}/reject" data-single-submit><input type="hidden" name="workspace" value="true"><input type="hidden" name="revision" value="{{ draft.revision }}"><button class="btn btn-outline-danger" data-pending-label="{{ 'Закрываем…' if ru else 'Closing…' }}">{{ 'Закрыть без отправки' if ru else 'Close without sending' }}</button></form>
+                  </div>
+                </div>
+              {% endif %}
+            {% endfor %}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+</section>

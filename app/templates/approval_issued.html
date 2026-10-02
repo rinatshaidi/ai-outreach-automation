@@ -1,0 +1,3 @@
+{% extends "base.html" %}
+{% block title %}Вариант подтверждён · AI Outreach System{% endblock %}
+{% block content %}<div class="card border-warning shadow-sm"><div class="card-body p-4"><h1 class="h4">Вариант письма №{{ approval.draft_revision }} подтверждён</h1><p>Одноразовый код показывается только сейчас. Он понадобится для отдельной тестовой отправки в Mailpit; в базе хранится только его защищённая контрольная сумма.</p><textarea class="form-control font-monospace mb-3" rows="3" readonly>{{ approval.approval_token }}</textarea><div class="small text-secondary mb-3">ID подтверждения: {{ approval.id }}</div><a class="btn btn-primary" href="/review/{{ draft_id }}">Вернуться к письму</a></div></div>{% endblock %}

@@ -1,0 +1,546 @@
+{% extends "base.html" %}
+
+{% macro permission_switch(name, label, checked=false) %}
+  <div class="form-check form-switch">
+    <input class="form-check-input" type="checkbox" name="{{ name }}" value="true" {% if checked %}checked{% endif %}>
+    <label class="form-check-label small">{{ label }}</label>
+  </div>
+{% endmacro %}
+
+{% block title %}Candidate Profile · AI Outreach System{% endblock %}
+
+{% block content %}
+  <div class="mb-4">
+    <h1 class="h2 mb-1">Candidate Profile</h1>
+    <p class="text-secondary mb-0">Факты не используются автоматически: каждое разрешение включается отдельно.</p>
+  </div>
+
+  <div class="alert alert-warning" role="alert">
+    Этап 10 выполняется локально. Ни один реальный факт не подтверждается автоматически;
+    согласование выполняется отдельно по каждому смысловому блоку.
+  </div>
+
+  {% if profile %}<section id="profile-review" class="mb-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
+      <div>
+        <h2 class="h4 mb-1">Проверка и согласование профиля</h2>
+        <p class="text-secondary mb-0">Откройте блок, прочитайте текст, при необходимости исправьте его и нажмите «Сохранить и подтвердить».</p>
+      </div>
+      <span class="badge text-bg-warning fs-6">23 независимых блока</span>
+    </div>
+    <div class="alert alert-light border">
+      Подтверждение текста не включает VERIFIED и не разрешает использование данных в AI, scoring, письмах, подписи или публикации. Эти решения выполняются позже и отдельно.
+    </div>
+    <div class="d-grid gap-3">
+    {% for card in section_cards %}
+      {% set section = card.section %}
+      <details class="card border-0 shadow-sm" id="review-{{ section.section_type }}" {% if loop.first or open_section == section.section_type %}open{% endif %}>
+        <summary class="card-header bg-white p-3 d-flex justify-content-between align-items-center gap-3" style="cursor:pointer">
+          <span>
+            <strong>{{ loop.index }}. {{ card.label }}</strong>
+            <small class="d-block text-secondary">Нажмите, чтобы открыть и прочитать</small>
+          </span>
+          <span class="badge {% if section.status == 'verified' %}text-bg-success{% elif section.status == 'user_approved' %}text-bg-primary{% elif section.status == 'review_required' %}text-bg-warning{% else %}text-bg-secondary{% endif %}">{{ card.status_label }}</span>
+        </summary>
+        <div class="card-body p-4">
+          <form method="post" action="/candidate-profile/sections/{{ section.section_type }}/review" class="row g-3">
+            <input type="hidden" name="version" value="{{ section.version }}">
+            <div class="col-12">
+              <label class="form-label fw-semibold" for="content-{{ section.section_type }}">Текст блока</label>
+              <textarea id="content-{{ section.section_type }}" class="form-control" name="content" rows="{{ 12 if section.section_type in ['ai_projects', 'technical_skills', 'strengths'] else 7 }}" maxlength="20000" required>{{ card.content }}</textarea>
+              <div class="form-text">Можно исправлять и дополнять этот текст прямо здесь.</div>
+            </div>
+            <div class="col-12">
+              <label class="form-label" for="comment-{{ section.section_type }}">Комментарий для истории изменений — необязательно</label>
+              <input id="comment-{{ section.section_type }}" class="form-control" name="comment" maxlength="4000" value="{{ section.user_comment or '' }}" placeholder="Например: уточнить даты и название организации позже">
+            </div>
+            <div class="col-12 d-flex flex-wrap gap-2 align-items-center">
+              {% if section.status in ['draft', 'review_required'] %}
+                <button class="btn btn-primary" name="decision" value="approve">Сохранить и подтвердить</button>
+                <button class="btn btn-outline-secondary" name="decision" value="correct">Сохранить черновик</button>
+              {% else %}
+                <span class="text-success fw-semibold me-2">Этот текст уже подтверждён вами.</span>
+                <button class="btn btn-outline-secondary" name="decision" value="correct">Изменить подтверждённый текст</button>
+              {% endif %}
+              <button class="btn btn-outline-warning" name="decision" value="defer">Отложить</button>
+              <button class="btn btn-outline-danger" name="decision" value="reject">Отклонить</button>
+            </div>
+          </form>
+        </div>
+      </details>
+    {% endfor %}
+    </div>
+  </section>{% endif %}
+
+  {% if profile %}
+  <details id="final-verification" class="card border-primary shadow-sm mb-4 profile-safety-review">
+    <summary class="card-body p-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
+      <span><strong>Проверка данных и безопасность</strong><span class="d-block small text-secondary">Служебный раздел: откройте только для проверки статусов и разрешений.</span></span>
+      <span class="badge {{ 'text-bg-success' if profile_readiness.pilot_first_wave_ready else 'text-bg-warning' }}">{{ profile_readiness.status }}</span>
+    </summary>
+    <div class="card-body p-4">
+      <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
+        <div>
+          <h2 class="h4 mb-1">Финальная проверка структурированного профиля</h2>
+          <p class="text-secondary mb-0">Проверьте каждую запись и явно подтвердите её. Ничего не получает VERIFIED при загрузке страницы или обычном сохранении.</p>
+        </div>
+        <span class="badge {{ 'text-bg-success' if profile_readiness.pilot_first_wave_ready else 'text-bg-warning' }} fs-6">{{ profile_readiness.status }}</span>
+      </div>
+      {% if verification_notice == 'updated' %}<div class="alert alert-success">Статус выбранной записи обновлён и сохранён в audit history.</div>{% endif %}
+      {% if verification_notice == 'all_verified' %}<div class="alert alert-success">Все показанные записи подтверждены вашим явным действием.</div>{% endif %}
+      {% if overlap_notice == 'parallel' %}<div class="alert alert-success">Параллельные роли подтверждены владельцем; решение записано в audit history.</div>{% endif %}
+      {% if overlap_notice == 'defer' %}<div class="alert alert-secondary">Проверка пересечения отложена; решение записано в audit history.</div>{% endif %}
+
+      <div class="row g-2 small mb-4">
+        <div class="col-md-4"><div class="border rounded p-2">23 блока согласованы: <strong>{{ 'да' if profile_readiness.semantic_blocks_approved else 'нет' }}</strong></div></div>
+        <div class="col-md-4"><div class="border rounded p-2">Структурированные записи VERIFIED: <strong>{{ 'да' if profile_readiness.structured_records_verified else 'нет' }}</strong></div></div>
+        <div class="col-md-4"><div class="border rounded p-2">Безопасные local-флаги: <strong>{{ 'да' if profile_readiness.safe_local_flags else 'нет' }}</strong></div></div>
+      </div>
+
+      {% for group in verification_groups %}
+      <div class="mb-4">
+        <h3 class="h6">{{ group.label }}</h3>
+        {% for item in group['items'] %}
+        <article class="border rounded p-3 mb-2">
+          <div class="d-flex flex-wrap justify-content-between gap-2">
+            <div><strong>{{ item.value }}</strong><div class="small text-secondary">Статус: {{ 'VERIFIED' if item.verified else 'USER_APPROVED / требуется финальное подтверждение' }}</div></div>
+            <span class="badge {{ 'text-bg-success' if item.verified else 'text-bg-warning' }}">{{ 'VERIFIED' if item.verified else 'PENDING' }}</span>
+          </div>
+          <div class="small mt-2">
+            Permissions:
+            LOCAL={{ 'ON' if item.record.store_private else 'OFF' }} ·
+            AI={{ 'ON' if item.record.use_for_ai_analysis else 'OFF' }} ·
+            SCORING={{ 'ON' if item.record.use_in_scoring else 'OFF' }} ·
+            DRAFT={{ 'ON' if item.record.use_in_draft else 'OFF' }} ·
+            EXTERNAL={{ 'ON' if item.record.send_externally else 'OFF' }} ·
+            SIGNATURE={{ 'ON' if item.record.use_in_signature else 'OFF' }} ·
+            PUBLICATION={{ 'ON' if item.record.publish_publicly else 'OFF' }}
+          </div>
+          <form method="post" action="/candidate-profile/verification/{{ group.key }}/{{ item.id }}" class="d-flex flex-wrap align-items-center gap-2 mt-3">
+            <input type="hidden" name="version" value="{{ item.version }}">
+            <input type="hidden" name="verified" value="{{ 'false' if item.verified else 'true' }}">
+            <div class="form-check">
+              <input required class="form-check-input" type="checkbox" name="confirmed" value="true" id="verify-{{ group.key }}-{{ item.id }}">
+              <label class="form-check-label small" for="verify-{{ group.key }}-{{ item.id }}">Подтверждаю это действие</label>
+            </div>
+            <button class="btn btn-sm {{ 'btn-outline-warning' if item.verified else 'btn-success' }}">{{ 'Снять VERIFIED' if item.verified else 'Подтвердить запись' }}</button>
+          </form>
+        </article>
+        {% else %}<p class="text-secondary small">Записей нет.</p>{% endfor %}
+      </div>
+      {% endfor %}
+
+      {% if overlapping_experiences %}
+      <div class="alert alert-warning">
+        <strong>Проверка периодов:</strong>
+        {% for left, right in overlapping_experiences %}
+          <div class="mt-2">Периоды «{{ left.position }} · {{ left.organization_label }}» и «{{ right.position }} · {{ right.organization_label }}» пересекаются. Это были параллельные роли?</div>
+          <div class="d-flex flex-wrap gap-2 mt-2">
+            {% for decision, label, css in [('parallel', 'Да — роли параллельные', 'btn-outline-success'), ('defer', 'Отложить', 'btn-outline-secondary')] %}
+            <form method="post" action="/candidate-profile/experience-overlap">
+              <input type="hidden" name="left_id" value="{{ left.id }}"><input type="hidden" name="right_id" value="{{ right.id }}"><input type="hidden" name="decision" value="{{ decision }}"><input type="hidden" name="confirmed" value="true">
+              <button class="btn btn-sm {{ css }}">{{ label }}</button>
+            </form>
+            {% endfor %}
+            <a class="btn btn-sm btn-outline-warning" href="#experiences">Нет — исправить даты</a>
+          </div>
+        {% endfor %}
+        <div class="small mt-2">Если да — записи можно оставить. Если нет — откройте соответствующий опыт ниже и исправьте даты. Пересечение само по себе не блокирует readiness.</div>
+      </div>
+      {% endif %}
+
+      <div class="border border-danger rounded p-3">
+        <h3 class="h6">Подтвердить все показанные записи</h3>
+        <p class="small text-secondary">Список выше является обязательным preview. Массовое подтверждение выполнится только после установки checkbox и нажатия кнопки.</p>
+        <form method="post" action="/candidate-profile/verification/verify-all">
+          <div class="form-check mb-2"><input required class="form-check-input" type="checkbox" name="confirmed" value="true" id="verify-all"><label class="form-check-label" for="verify-all">Я просмотрел все записи и подтверждаю их достоверность</label></div>
+          <button class="btn btn-danger" {% if not profile_readiness.semantic_blocks_approved %}disabled{% endif %}>Подтвердить все просмотренные записи</button>
+        </form>
+      </div>
+    </div>
+  </details>
+  {% endif %}
+
+  <section class="card border-0 shadow-sm mb-4">
+    <div class="card-body p-4">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="h5 mb-0">Основной профиль</h2>
+        {% if profile %}<span class="badge text-bg-secondary">Версия {{ profile.version }}</span>{% endif %}
+      </div>
+      {% if profile_form_errors %}
+        <div class="alert alert-danger" id="profile-form-errors" role="alert">
+          <h3 class="h6">Профиль не сохранён. Исправьте отмеченные поля:</h3>
+          <ul class="mb-0">
+          {% for error in profile_form_error_items %}
+            <li><a class="alert-link" href="#field-{{ error.field }}">{{ error.label }}</a>: {{ error.message }}</li>
+          {% endfor %}
+          </ul>
+          <p class="small mb-0 mt-2">Остальные введённые значения сохранены в форме и повторно вводить их не нужно.</p>
+        </div>
+      {% endif %}
+      <form method="post" action="/candidate-profile/profile" class="row g-3">
+        {% if profile %}<input type="hidden" name="version" value="{{ profile.version }}">{% endif %}
+        <div class="col-md-6">
+          <label class="form-label">Отображаемое имя</label>
+          <input id="field-display_name" class="form-control" name="display_name" maxlength="160" value="{{ profile_form.display_name }}" placeholder="Rinat Shaidi">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Профессиональный заголовок</label>
+          <input id="field-professional_title" class="form-control" name="professional_title" maxlength="200" value="{{ profile_form.professional_title }}" placeholder="AI Automation Engineer with Business Background">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Локация</label>
+          <input id="field-location" class="form-control" name="location" maxlength="200" value="{{ profile_form.location }}" placeholder="Krasnodar, Russia">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Уровень языка</label>
+          <input id="field-language_level" class="form-control" name="language_level" maxlength="80" value="{{ profile_form.language_level }}" placeholder="Только подтверждённый уровень">
+        </div>
+        <div class="col-12">
+          <label class="form-label">Summary</label>
+          <textarea id="field-summary" class="form-control" name="summary" rows="3" maxlength="4000">{{ profile_form.summary }}</textarea>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Желаемые роли</label>
+          <input id="field-desired_roles" class="form-control" name="desired_roles" value="{{ profile_form.desired_roles }}" placeholder="AI Automation, Project Management">
+          <div class="form-text">Перечислите значения через запятую.</div>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Страны</label>
+          <input id="field-preferred_countries" class="form-control" name="preferred_countries" value="{{ profile_form.preferred_countries }}" placeholder="Любая страна">
+          <div class="form-text">«Любая страна» допустима.</div>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Формат работы</label>
+          <input id="field-work_formats" class="form-control" name="work_formats" value="{{ profile_form.work_formats }}" placeholder="remote, hybrid">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Общий опыт, лет</label>
+          <input id="field-total_years_experience" class="form-control {% if profile_form_errors.get('total_years_experience') %}is-invalid{% endif %}" type="text" inputmode="decimal" name="total_years_experience" value="{{ profile_form.total_years_experience }}" placeholder="10 или 10+">
+          <div class="form-text">Допустимо число от 0 до 80 или запись 10+.</div>
+          {% if profile_form_errors.get('total_years_experience') %}<div class="invalid-feedback">{{ profile_form_errors.total_years_experience }}</div>{% endif %}
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Управленческий опыт, лет</label>
+          <input id="field-management_years_experience" class="form-control {% if profile_form_errors.get('management_years_experience') %}is-invalid{% endif %}" type="text" inputmode="decimal" name="management_years_experience" value="{{ profile_form.management_years_experience }}" placeholder="10 или 10+">
+          <div class="form-text">Допустимо число от 0 до 80 или запись 10+.</div>
+          {% if profile_form_errors.get('management_years_experience') %}<div class="invalid-feedback">{{ profile_form_errors.management_years_experience }}</div>{% endif %}
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Смежные роли</label>
+          <input id="field-adjacent_roles" class="form-control" name="adjacent_roles" value="{{ profile_form.adjacent_roles }}">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Нежелательные роли</label>
+          <input id="field-excluded_roles" class="form-control" name="excluded_roles" value="{{ profile_form.excluded_roles }}">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Предпочтительные отрасли</label>
+          <input id="field-preferred_industries" class="form-control" name="preferred_industries" value="{{ profile_form.preferred_industries }}">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Исключённые отрасли</label>
+          <input id="field-excluded_industries" class="form-control" name="excluded_industries" value="{{ profile_form.excluded_industries }}">
+        </div>
+        <div class="col-12"><hr><h3 class="h6">Форматы сотрудничества и география</h3></div>
+        <div class="col-md-6">
+          <label class="form-label">Collaboration formats</label>
+          <input id="field-collaboration_formats" class="form-control {% if profile_form_errors.get('collaboration_formats') %}is-invalid{% endif %}" name="collaboration_formats" value="{{ profile_form.collaboration_formats }}" placeholder="full_time, project_based, consulting">
+          <div class="form-text">Допустимо: full_time, part_time, project_based, contract, consulting, advisory, temporary_launch_role, local_representative, business_development, operations_management.</div>
+          {% if profile_form_errors.get('collaboration_formats') %}<div class="invalid-feedback">{{ profile_form_errors.collaboration_formats }}</div>{% endif %}
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Workplace formats</label>
+          <input id="field-workplace_formats" class="form-control {% if profile_form_errors.get('workplace_formats') %}is-invalid{% endif %}" name="workplace_formats" value="{{ profile_form.workplace_formats }}" placeholder="remote, hybrid, on_site, relocation">
+          <div class="form-text">Допустимо только: remote, hybrid, on_site, relocation. Временный переезд и командировки указываются ниже отдельно.</div>
+          {% if profile_form_errors.get('workplace_formats') %}<div class="invalid-feedback">{{ profile_form_errors.workplace_formats }}</div>{% endif %}
+        </div>
+        <div class="col-md-4"><label class="form-label">Remote — страны</label><input id="field-remote_work_countries" class="form-control" name="remote_work_countries" value="{{ profile_form.remote_work_countries }}"></div>
+        <div class="col-md-4"><label class="form-label">Relocation — страны</label><input id="field-relocation_countries" class="form-control" name="relocation_countries" value="{{ profile_form.relocation_countries }}"></div>
+        <div class="col-md-4"><label class="form-label">Командировки — страны</label><input id="field-business_trip_countries" class="form-control" name="business_trip_countries" value="{{ profile_form.business_trip_countries }}"></div>
+        <div class="col-md-6"><label class="form-label">Предпочтительные регионы</label><input id="field-preferred_regions" class="form-control" name="preferred_regions" value="{{ profile_form.preferred_regions }}"></div>
+        <div class="col-md-6"><label class="form-label">Типы компаний</label><input id="field-preferred_company_types" class="form-control" name="preferred_company_types" value="{{ profile_form.preferred_company_types }}"></div>
+        <div class="col-md-6"><label class="form-label">Географические ограничения</label><textarea id="field-geography_constraints" class="form-control" name="geography_constraints" rows="2">{{ profile_form.geography_constraints }}</textarea></div>
+        <div class="col-md-6"><label class="form-label">Предпочтительная культура</label><textarea id="field-preferred_culture" class="form-control" name="preferred_culture" rows="2">{{ profile_form.preferred_culture }}</textarea></div>
+        <div class="col-md-4"><label class="form-label">Visa / sponsorship</label><select id="field-visa_or_sponsorship_required" class="form-select {% if profile_form_errors.get('visa_or_sponsorship_required') %}is-invalid{% endif %}" name="visa_or_sponsorship_required"><option value="" {% if profile_form.visa_or_sponsorship_required == '' %}selected{% endif %}>Не указано</option><option value="true" {% if profile_form.visa_or_sponsorship_required == 'true' %}selected{% endif %}>Требуется</option><option value="false" {% if profile_form.visa_or_sponsorship_required == 'false' %}selected{% endif %}>Не требуется</option></select>{% if profile_form_errors.get('visa_or_sponsorship_required') %}<div class="invalid-feedback">{{ profile_form_errors.visa_or_sponsorship_required }}</div>{% endif %}</div>
+        <div class="col-md-4"><label class="form-label">Целевой доход</label><input id="field-target_income" class="form-control" name="target_income" maxlength="160" value="{{ profile_form.target_income }}"><div class="form-text">Свободный текст, до 160 символов.</div></div>
+        <div class="col-md-4"><label class="form-label">Уровень ответственности</label><input id="field-desired_responsibility_level" class="form-control" name="desired_responsibility_level" maxlength="160" value="{{ profile_form.desired_responsibility_level }}"></div>
+        <div class="col-12 d-flex flex-wrap gap-3">
+          {{ permission_switch('temporary_relocation_allowed', 'Готовность к временному переезду', profile_form.temporary_relocation_allowed) }}
+          {{ permission_switch('on_the_ground_launch_allowed', 'Готовность запускать направление на месте', profile_form.on_the_ground_launch_allowed) }}
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Статус</label>
+          <select id="field-profile_status" class="form-select {% if profile_form_errors.get('profile_status') %}is-invalid{% endif %}" name="profile_status">
+            <option value="draft" {% if profile_form.profile_status == 'draft' %}selected{% endif %}>Draft</option>
+            <option value="review_required" {% if profile_form.profile_status == 'review_required' %}selected{% endif %}>Review required</option>
+          </select>
+          {% if profile_form_errors.get('profile_status') %}<div class="invalid-feedback">{{ profile_form_errors.profile_status }}</div>{% endif %}
+        </div>
+        <div class="col-12">
+          <button class="btn btn-primary" type="submit">Сохранить профиль</button>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  {% if profile %}
+  <section id="experiences" class="card border-0 shadow-sm mb-4">
+    <div class="card-body p-4">
+      <h2 class="h5">Профессиональный опыт</h2>
+      <p class="text-secondary">Добавляйте одну роль за раз. Сохранённую запись можно раскрыть, исправить или удалить отдельно.</p>
+      {% if experience_notice == 'created' %}<div class="alert alert-success">Запись опыта добавлена.</div>{% endif %}
+      {% if experience_notice == 'updated' %}<div class="alert alert-success">Изменения записи сохранены.</div>{% endif %}
+      {% if experience_notice == 'deleted' %}<div class="alert alert-success">Выбранная запись удалена; событие записано в audit history.</div>{% endif %}
+      {% if experience_action_error %}<div class="alert alert-danger">{{ experience_action_error }}</div>{% endif %}
+      {% if experience_form_error_items %}
+      <div class="alert alert-danger">
+        <strong>Запись не сохранена. Исправьте поля:</strong>
+        <ul class="mb-0 mt-2">{% for error in experience_form_error_items %}<li><a href="#experience-field-{{ error.field }}">{{ error.label }}</a>: {{ error.message }}</li>{% endfor %}</ul>
+      </div>
+      {% endif %}
+      {% if experience_duplicate %}
+      <div class="alert alert-warning">
+        <strong>{{ experience_duplicate.message }}</strong><br>
+        Найдена запись {{ experience_duplicate.existing_position }}{% if experience_duplicate.existing_organization %} · {{ experience_duplicate.existing_organization }}{% endif %}
+        (ID {{ experience_duplicate.existing_id }}). Если это действительно отдельный период, отметьте подтверждение ниже и отправьте форму повторно.
+      </div>
+      {% endif %}
+      <form method="post" action="/candidate-profile/experiences" class="row g-3 border rounded p-3 mb-4">
+        <div class="col-md-6"><label class="form-label">Должность</label><input id="experience-field-position" required maxlength="200" class="form-control {% if experience_form_errors.get('position') %}is-invalid{% endif %}" name="position" value="{{ experience_form.position }}">{% if experience_form_errors.get('position') %}<div class="invalid-feedback">{{ experience_form_errors.position }}</div>{% endif %}</div>
+        <div class="col-md-6"><label class="form-label">Организация</label><input id="experience-field-organization_label" maxlength="200" class="form-control {% if experience_form_errors.get('organization_label') %}is-invalid{% endif %}" name="organization_label" value="{{ experience_form.organization_label }}">{% if experience_form_errors.get('organization_label') %}<div class="invalid-feedback">{{ experience_form_errors.organization_label }}</div>{% endif %}</div>
+        <div class="col-md-4"><label class="form-label">Отрасль</label><input id="experience-field-industry" maxlength="160" class="form-control {% if experience_form_errors.get('industry') %}is-invalid{% endif %}" name="industry" value="{{ experience_form.industry }}">{% if experience_form_errors.get('industry') %}<div class="invalid-feedback">{{ experience_form_errors.industry }}</div>{% endif %}</div>
+        <div class="col-md-4"><label class="form-label">Дата начала</label><input id="experience-field-started_at" class="form-control {% if experience_form_errors.get('started_at') %}is-invalid{% endif %}" type="date" name="started_at" value="{{ experience_form.started_at }}">{% if experience_form_errors.get('started_at') %}<div class="invalid-feedback">{{ experience_form_errors.started_at }}</div>{% endif %}</div>
+        <div class="col-md-4"><label class="form-label">Дата окончания</label><input id="experience-field-ended_at" class="form-control {% if experience_form_errors.get('ended_at') %}is-invalid{% endif %}" type="date" name="ended_at" value="{{ experience_form.ended_at }}">{% if experience_form_errors.get('ended_at') %}<div class="invalid-feedback">{{ experience_form_errors.ended_at }}</div>{% endif %}</div>
+        <div class="col-md-6"><label class="form-label">Типы проектов</label><input id="experience-field-project_types" class="form-control" name="project_types" value="{{ experience_form.project_types }}" placeholder="Через запятую"></div>
+        <div class="col-md-6"><label class="form-label">Уровень ответственности</label><textarea id="experience-field-responsibility_level" maxlength="160" rows="2" class="form-control {% if experience_form_errors.get('responsibility_level') %}is-invalid{% endif %}" name="responsibility_level" placeholder="Краткая характеристика, максимум 160 символов">{{ experience_form.responsibility_level }}</textarea><div class="form-text">Свободный текст, максимум 160 символов.</div>{% if experience_form_errors.get('responsibility_level') %}<div class="invalid-feedback">{{ experience_form_errors.responsibility_level }}</div>{% endif %}</div>
+        <div class="col-md-3"><label class="form-label">Макс. команда</label><input id="experience-field-team_size_max" class="form-control {% if experience_form_errors.get('team_size_max') %}is-invalid{% endif %}" type="text" inputmode="numeric" name="team_size_max" value="{{ experience_form.team_size_max }}" placeholder="Например, 300">{% if experience_form_errors.get('team_size_max') %}<div class="invalid-feedback">{{ experience_form_errors.team_size_max }}</div>{% endif %}</div>
+        <div class="col-md-9"><label class="form-label">География проектов</label><input id="experience-field-project_geographies" class="form-control" name="project_geographies" value="{{ experience_form.project_geographies }}" placeholder="Через запятую"></div>
+        <div class="col-12 d-flex flex-wrap gap-3">
+          {{ permission_switch('contractor_management', 'Подрядчики', experience_form.contractor_management) }}{{ permission_switch('negotiations', 'Переговоры', experience_form.negotiations) }}{{ permission_switch('territory_development', 'Развитие территорий', experience_form.territory_development) }}{{ permission_switch('launches', 'Запуски', experience_form.launches) }}{{ permission_switch('operations_management', 'Operations', experience_form.operations_management) }}
+        </div>
+        <div class="col-12 d-flex flex-wrap gap-3">{{ permission_switch('store_private', 'Хранить локально', experience_form.store_private) }}{{ permission_switch('use_for_ai_analysis', 'AI', experience_form.use_for_ai_analysis) }}{{ permission_switch('use_in_scoring', 'Scoring', experience_form.use_in_scoring) }}{{ permission_switch('use_in_draft', 'Draft', experience_form.use_in_draft) }}{{ permission_switch('send_externally', 'Отправка', experience_form.send_externally) }}{{ permission_switch('use_in_signature', 'Подпись', experience_form.use_in_signature) }}{{ permission_switch('publish_publicly', 'Публикация', experience_form.publish_publicly) }}</div>
+        {% if experience_duplicate %}<div class="col-12"><div class="form-check"><input required class="form-check-input" type="checkbox" name="confirm_duplicate" value="true" id="confirm-experience-duplicate"><label class="form-check-label" for="confirm-experience-duplicate">Да, это отдельная запись; создать её несмотря на предупреждение</label></div></div>{% endif %}
+        <div class="col-12"><button class="btn btn-outline-primary">Добавить опыт</button></div>
+      </form>
+      {% for item in experiences %}
+      {% set key = item.id|string %}{% set edit = experience_edits[key] %}{% set edit_errors = experience_edit_errors.get(key, {}) %}{% set edit_duplicate = experience_edit_duplicates.get(key) %}
+      <details class="border rounded p-3 mb-3" {% if open_experience == key %}open{% endif %}>
+        <summary style="cursor:pointer"><strong>{{ item.position }}</strong> · {{ item.organization_label or 'Организация не указана' }} <span class="small text-secondary">v{{ item.version }} · нажмите для просмотра и исправления</span></summary>
+        <div class="mt-3">
+          <dl class="row small mb-3"><dt class="col-sm-3">Период</dt><dd class="col-sm-9">{{ item.started_at or 'не указан' }} — {{ item.ended_at or 'по настоящее время / не указано' }}</dd><dt class="col-sm-3">Команда</dt><dd class="col-sm-9">{{ item.team_size_max if item.team_size_max is not none else 'не указана' }}</dd><dt class="col-sm-3">Ответственность</dt><dd class="col-sm-9">{{ item.responsibility_level or 'не указана' }}</dd><dt class="col-sm-3">Проекты</dt><dd class="col-sm-9">{{ item.project_types | join(', ') or 'не указаны' }}</dd></dl>
+          {% if edit_errors %}<div class="alert alert-danger"><strong>Изменения не сохранены:</strong><ul class="mb-0">{% for field, message in edit_errors.items() %}<li>{{ experience_form_labels.get(field, field) }}: {{ message }}</li>{% endfor %}</ul></div>{% endif %}
+          {% if edit_duplicate %}<div class="alert alert-warning">{{ edit_duplicate.message }} Найдена запись ID {{ edit_duplicate.existing_id }}.</div>{% endif %}
+          <form method="post" action="/candidate-profile/experiences/{{ item.id }}/edit" class="row g-3 border rounded p-3">
+            <input type="hidden" name="version" value="{{ edit.version }}">
+            <div class="col-md-6"><label class="form-label">Должность</label><input required maxlength="200" class="form-control {% if edit_errors.get('position') %}is-invalid{% endif %}" name="position" value="{{ edit.position }}">{% if edit_errors.get('position') %}<div class="invalid-feedback">{{ edit_errors.position }}</div>{% endif %}</div>
+            <div class="col-md-6"><label class="form-label">Организация</label><input maxlength="200" class="form-control" name="organization_label" value="{{ edit.organization_label }}"></div>
+            <div class="col-md-4"><label class="form-label">Отрасль</label><input maxlength="160" class="form-control" name="industry" value="{{ edit.industry }}"></div>
+            <div class="col-md-4"><label class="form-label">Дата начала</label><input type="date" class="form-control {% if edit_errors.get('started_at') %}is-invalid{% endif %}" name="started_at" value="{{ edit.started_at }}">{% if edit_errors.get('started_at') %}<div class="invalid-feedback">{{ edit_errors.started_at }}</div>{% endif %}</div>
+            <div class="col-md-4"><label class="form-label">Дата окончания</label><input type="date" class="form-control {% if edit_errors.get('ended_at') %}is-invalid{% endif %}" name="ended_at" value="{{ edit.ended_at }}">{% if edit_errors.get('ended_at') %}<div class="invalid-feedback">{{ edit_errors.ended_at }}</div>{% endif %}</div>
+            <div class="col-md-6"><label class="form-label">Типы проектов</label><input class="form-control" name="project_types" value="{{ edit.project_types }}"></div>
+            <div class="col-md-6"><label class="form-label">Уровень ответственности</label><textarea maxlength="160" rows="2" class="form-control {% if edit_errors.get('responsibility_level') %}is-invalid{% endif %}" name="responsibility_level">{{ edit.responsibility_level }}</textarea><div class="form-text">Максимум 160 символов.</div>{% if edit_errors.get('responsibility_level') %}<div class="invalid-feedback">{{ edit_errors.responsibility_level }}</div>{% endif %}</div>
+            <div class="col-md-3"><label class="form-label">Макс. команда</label><input type="text" inputmode="numeric" class="form-control {% if edit_errors.get('team_size_max') %}is-invalid{% endif %}" name="team_size_max" value="{{ edit.team_size_max }}">{% if edit_errors.get('team_size_max') %}<div class="invalid-feedback">{{ edit_errors.team_size_max }}</div>{% endif %}</div>
+            <div class="col-md-9"><label class="form-label">География проектов</label><input class="form-control" name="project_geographies" value="{{ edit.project_geographies }}"></div>
+            <div class="col-12 d-flex flex-wrap gap-3">{{ permission_switch('contractor_management', 'Подрядчики', edit.contractor_management) }}{{ permission_switch('negotiations', 'Переговоры', edit.negotiations) }}{{ permission_switch('territory_development', 'Развитие территорий', edit.territory_development) }}{{ permission_switch('launches', 'Запуски', edit.launches) }}{{ permission_switch('operations_management', 'Operations', edit.operations_management) }}</div>
+            <div class="col-12 d-flex flex-wrap gap-3">{{ permission_switch('store_private', 'Хранить локально', edit.store_private) }}{{ permission_switch('use_for_ai_analysis', 'AI', edit.use_for_ai_analysis) }}{{ permission_switch('use_in_scoring', 'Scoring', edit.use_in_scoring) }}{{ permission_switch('use_in_draft', 'Draft', edit.use_in_draft) }}{{ permission_switch('send_externally', 'Отправка', edit.send_externally) }}{{ permission_switch('use_in_signature', 'Подпись', edit.use_in_signature) }}{{ permission_switch('publish_publicly', 'Публикация', edit.publish_publicly) }}</div>
+            {% if edit_duplicate %}<div class="col-12"><div class="form-check"><input required class="form-check-input" type="checkbox" name="confirm_duplicate" value="true" id="confirm-edit-duplicate-{{ item.id }}"><label class="form-check-label" for="confirm-edit-duplicate-{{ item.id }}">Сохранить как отдельную запись несмотря на предупреждение</label></div></div>{% endif %}
+            <div class="col-12"><button class="btn btn-primary" type="submit">Сохранить изменения</button></div>
+          </form>
+          <form method="post" action="/candidate-profile/experiences/{{ item.id }}/delete" class="border border-danger rounded p-3 mt-3" onsubmit="return window.confirm('Удалить только эту запись профессионального опыта?');">
+            <input type="hidden" name="version" value="{{ item.version }}">
+            <div class="form-check mb-2"><input required class="form-check-input" type="checkbox" name="confirm_delete" value="yes" id="confirm-delete-{{ item.id }}"><label class="form-check-label" for="confirm-delete-{{ item.id }}">Подтверждаю удаление именно записи «{{ item.position }} · {{ item.organization_label or 'без организации' }}»</label></div>
+            <button class="btn btn-outline-danger btn-sm" type="submit">Удалить эту запись</button>
+          </form>
+        </div>
+      </details>
+      {% else %}<p class="text-secondary">Структурированного опыта пока нет; legacy facts сохранены ниже.</p>{% endfor %}
+    </div>
+  </section>
+
+  <section id="skills" class="card border-0 shadow-sm mb-4">
+    <div class="card-body p-4">
+      <h2 class="h5">AI и профессиональные навыки</h2>
+      <p class="text-secondary">Сохранённый навык можно раскрыть нажатием на его заголовок и исправить.</p>
+      {% if skill_notice == 'updated' %}<div class="alert alert-success">Изменения навыка сохранены.</div>{% endif %}
+      <form method="post" action="/candidate-profile/skills" class="row g-3 border rounded p-3 mb-4">
+        <div class="col-md-4"><input required class="form-control" name="name" placeholder="Python / Operations"></div>
+        <div class="col-md-4"><select class="form-select" name="skill_group">{% for group in skill_groups %}<option value="{{ group.value }}">{{ group.value }}</option>{% endfor %}</select></div>
+        <div class="col-md-4"><select class="form-select" name="actual_level">{% for level in skill_levels %}<option value="{{ level.value }}">{{ level.value }}</option>{% endfor %}</select></div>
+        <div class="col-md-3"><input class="form-control" type="number" min="0" name="duration_months" placeholder="Месяцев практики"></div>
+        <div class="col-md-9"><input class="form-control" name="evidence" placeholder="Evidence; обязательно для proficient/advanced"></div>
+        <div class="col-md-6"><textarea class="form-control" name="verified_results" rows="2" placeholder="Подтверждённые результаты"></textarea></div>
+        <div class="col-md-6"><textarea class="form-control" name="limitations" rows="2" placeholder="Фактические ограничения; обязательно для AI/technology"></textarea></div>
+        <div class="col-12 d-flex flex-wrap gap-3">{{ permission_switch('store_private', 'Хранить локально', true) }}{{ permission_switch('use_for_ai_analysis', 'AI') }}{{ permission_switch('use_in_scoring', 'Scoring') }}{{ permission_switch('use_in_draft', 'Draft') }}{{ permission_switch('send_externally', 'Отправка') }}{{ permission_switch('use_in_signature', 'Подпись') }}{{ permission_switch('publish_publicly', 'Публикация') }}</div>
+        <div class="col-12"><button class="btn btn-outline-primary">Добавить навык</button></div>
+      </form>
+      {% for item in skills %}
+      {% set key = item.id|string %}{% set edit = skill_edits[key] %}{% set edit_errors = skill_edit_errors.get(key, {}) %}
+      <details class="border rounded p-3 mb-3" {% if open_skill == key %}open{% endif %}>
+        <summary style="cursor:pointer"><strong>{{ item.name }}</strong> · {{ item.skill_group }} / {{ item.actual_level }} <span class="small text-secondary">v{{ item.version }} · нажмите для просмотра и исправления</span></summary>
+        <div class="mt-3">
+          {% if item.evidence %}<p class="small mb-1"><strong>Evidence:</strong> {{ item.evidence }}</p>{% endif %}
+          {% if item.limitations %}<p class="small text-secondary"><strong>Ограничения:</strong> {{ item.limitations }}</p>{% endif %}
+          {% if edit_errors %}<div class="alert alert-danger"><strong>Изменения не сохранены:</strong><ul class="mb-0">{% for field, message in edit_errors.items() %}<li>{{ field }}: {{ message }}</li>{% endfor %}</ul></div>{% endif %}
+          <form method="post" action="/candidate-profile/skills/{{ item.id }}/edit" class="row g-3 border rounded p-3">
+            <input type="hidden" name="version" value="{{ edit.version }}">
+            <div class="col-md-4"><label class="form-label">Навык</label><input required maxlength="200" class="form-control {% if edit_errors.get('name') %}is-invalid{% endif %}" name="name" value="{{ edit.name }}">{% if edit_errors.get('name') %}<div class="invalid-feedback">{{ edit_errors.name }}</div>{% endif %}</div>
+            <div class="col-md-4"><label class="form-label">Группа</label><select class="form-select" name="skill_group">{% for group in skill_groups %}<option value="{{ group.value }}" {% if edit.skill_group == group.value %}selected{% endif %}>{{ group.value }}</option>{% endfor %}</select></div>
+            <div class="col-md-4"><label class="form-label">Уровень</label><select class="form-select" name="actual_level">{% for level in skill_levels %}<option value="{{ level.value }}" {% if edit.actual_level == level.value %}selected{% endif %}>{{ level.value }}</option>{% endfor %}</select></div>
+            <div class="col-md-3"><label class="form-label">Месяцев практики</label><input class="form-control" type="number" min="0" max="960" name="duration_months" value="{{ edit.duration_months }}"></div>
+            <div class="col-md-9"><label class="form-label">Evidence</label><input maxlength="4000" class="form-control" name="evidence" value="{{ edit.evidence }}"><div class="form-text">Обязательно для уровней proficient и advanced.</div></div>
+            <div class="col-md-6"><label class="form-label">Подтверждённые результаты</label><textarea maxlength="4000" class="form-control" name="verified_results" rows="3">{{ edit.verified_results }}</textarea></div>
+            <div class="col-md-6"><label class="form-label">Ограничения</label><textarea maxlength="4000" class="form-control" name="limitations" rows="3">{{ edit.limitations }}</textarea><div class="form-text">Обязательно для групп AI и technology.</div></div>
+            <div class="col-12 d-flex flex-wrap gap-3">{{ permission_switch('store_private', 'Хранить локально', edit.store_private) }}{{ permission_switch('use_for_ai_analysis', 'AI', edit.use_for_ai_analysis) }}{{ permission_switch('use_in_scoring', 'Scoring', edit.use_in_scoring) }}{{ permission_switch('use_in_draft', 'Draft', edit.use_in_draft) }}{{ permission_switch('send_externally', 'Отправка', edit.send_externally) }}{{ permission_switch('use_in_signature', 'Подпись', edit.use_in_signature) }}{{ permission_switch('publish_publicly', 'Публикация', edit.publish_publicly) }}</div>
+            <div class="col-12"><button class="btn btn-primary" type="submit">Сохранить изменения</button></div>
+          </form>
+        </div>
+      </details>
+      {% else %}<p class="text-secondary">Структурированных навыков пока нет.</p>{% endfor %}
+    </div>
+  </section>
+
+  <section id="strengths" class="card border-0 shadow-sm mb-4">
+    <div class="card-body p-4">
+      <h2 class="h5">Сильные стороны</h2>
+      <form method="post" action="/candidate-profile/strengths" class="row g-3 border rounded p-3 mb-4">
+        <div class="col-md-3"><select class="form-select" name="strength_type">{% for type in strength_types %}<option value="{{ type.value }}">{{ type.value }}</option>{% endfor %}</select></div>
+        <div class="col-md-6"><input required class="form-control" name="text" placeholder="Подтверждаемая сильная сторона"></div>
+        <div class="col-md-3"><input class="form-control" type="number" min="0" max="1000" name="priority" value="100"></div>
+        <div class="col-12"><input class="form-control" name="evidence" placeholder="Evidence"></div>
+        <div class="col-12 d-flex flex-wrap gap-3">{{ permission_switch('store_private', 'Хранить локально', true) }}{{ permission_switch('use_for_ai_analysis', 'AI') }}{{ permission_switch('use_in_scoring', 'Scoring') }}{{ permission_switch('use_in_draft', 'Draft') }}{{ permission_switch('send_externally', 'Отправка') }}{{ permission_switch('use_in_signature', 'Подпись') }}{{ permission_switch('publish_publicly', 'Публикация') }}</div>
+        <div class="col-12"><button class="btn btn-outline-primary">Добавить сильную сторону</button></div>
+      </form>
+      {% for item in strengths %}<article class="border rounded p-3 mb-2"><span class="badge text-bg-light">{{ item.strength_type }}</span> {{ item.text }}</article>{% else %}<p class="text-secondary">Сильные стороны ещё не структурированы.</p>{% endfor %}
+    </div>
+  </section>
+
+  <section id="facts" class="card border-0 shadow-sm mb-4">
+    <div class="card-body p-4">
+      <h2 class="h5">Подтверждённые факты</h2>
+      {% if fact_notice == 'deleted' %}<div class="alert alert-success">Выбранный факт удалён.</div>{% endif %}
+      {% if fact_action_error %}<div class="alert alert-danger">{{ fact_action_error }}</div>{% endif %}
+      <form method="post" action="/candidate-profile/facts" class="row g-3 border rounded p-3 mb-4">
+        <div class="col-md-3"><select class="form-select" name="fact_type">{% for type in fact_types %}<option value="{{ type.value }}">{{ type.value }}</option>{% endfor %}</select></div>
+        <div class="col-md-9"><input class="form-control" required name="text" maxlength="4000" placeholder="Synthetic project or skill fact"></div>
+        <div class="col-md-6"><input class="form-control" name="evidence" placeholder="Подтверждение"></div>
+        <div class="col-md-6"><input class="form-control" type="url" name="source_link" placeholder="https://example.test/evidence"></div>
+        <div class="col-12 d-flex flex-wrap gap-3">
+          {{ permission_switch('store_private', 'Хранить локально', true) }}
+          {{ permission_switch('use_for_ai_analysis', 'Передавать AI') }}
+          {{ permission_switch('use_in_scoring', 'Использовать в scoring') }}
+          {{ permission_switch('use_in_draft', 'Использовать в draft') }}
+          {{ permission_switch('send_externally', 'Отправлять') }}
+          {{ permission_switch('use_in_signature', 'Использовать в подписи') }}
+          {{ permission_switch('publish_publicly', 'Публиковать') }}
+        </div>
+        <div class="col-12"><button class="btn btn-outline-primary" type="submit">Добавить факт</button></div>
+      </form>
+      {% for fact in facts %}
+        <article class="border rounded p-3 mb-3">
+          <div class="d-flex justify-content-between gap-3"><strong>{{ fact.fact_type }}</strong><span class="text-secondary small">v{{ fact.version }}</span></div>
+          <p class="mb-2">{{ fact.text }}</p>
+          <form method="post" action="/candidate-profile/facts/{{ fact.id }}/permissions" class="d-flex flex-wrap align-items-center gap-3">
+            <input type="hidden" name="version" value="{{ fact.version }}">
+            {{ permission_switch('store_private', 'Локально', fact.store_private) }}
+            {{ permission_switch('use_for_ai_analysis', 'AI', fact.use_for_ai_analysis) }}
+            {{ permission_switch('use_in_scoring', 'Scoring', fact.use_in_scoring) }}
+            {{ permission_switch('use_in_draft', 'Draft', fact.use_in_draft) }}
+            {{ permission_switch('send_externally', 'Отправка', fact.send_externally) }}
+            {{ permission_switch('use_in_signature', 'Подпись', fact.use_in_signature) }}
+            {{ permission_switch('publish_publicly', 'Публикация', fact.publish_publicly) }}
+            <button class="btn btn-sm btn-outline-secondary" type="submit">Обновить разрешения</button>
+          </form>
+          <form method="post" action="/candidate-profile/facts/{{ fact.id }}/delete" class="border border-danger rounded p-2 mt-3" onsubmit="return window.confirm('Удалить только этот факт?');">
+            <input type="hidden" name="version" value="{{ fact.version }}">
+            <div class="form-check mb-2"><input required class="form-check-input" type="checkbox" name="confirm_delete" value="yes" id="confirm-delete-fact-{{ fact.id }}"><label class="form-check-label small" for="confirm-delete-fact-{{ fact.id }}">Подтверждаю удаление этого факта</label></div>
+            <button class="btn btn-sm btn-outline-danger" type="submit">Удалить факт</button>
+          </form>
+        </article>
+      {% else %}<p class="text-secondary">Фактов пока нет.</p>{% endfor %}
+    </div>
+  </section>
+
+  <section id="contacts" class="card border-0 shadow-sm mb-4">
+    <div class="card-body p-4">
+      <h2 class="h5">Контакты</h2>
+      {% if contact_notice == 'deleted' %}<div class="alert alert-success">Выбранный контакт удалён.</div>{% endif %}
+      {% if contact_action_error %}<div class="alert alert-danger">{{ contact_action_error }}</div>{% endif %}
+      <form method="post" action="/candidate-profile/contacts" class="row g-3 border rounded p-3 mb-4">
+        <div class="col-md-3"><select class="form-select" name="contact_type">{% for type in contact_types %}<option value="{{ type.value }}">{{ type.value }}</option>{% endfor %}</select></div>
+        <div class="col-md-9"><input class="form-control" required name="value" placeholder="synthetic@example.test"></div>
+        <div class="col-12 d-flex flex-wrap gap-3">
+          {{ permission_switch('store_private', 'Хранить локально', true) }}
+          {{ permission_switch('use_for_ai_analysis', 'Передавать AI') }}
+          {{ permission_switch('use_in_scoring', 'Использовать в scoring') }}
+          {{ permission_switch('use_in_draft', 'Использовать в draft') }}
+          {{ permission_switch('send_externally', 'Отправлять') }}
+          {{ permission_switch('use_in_signature', 'Добавлять в подпись') }}
+          {{ permission_switch('publish_publicly', 'Публиковать') }}
+        </div>
+        <div class="col-12"><button class="btn btn-outline-primary" type="submit">Добавить контакт</button></div>
+      </form>
+      {% for contact in contacts %}
+        <article class="border rounded p-3 mb-3">
+          <div class="d-flex justify-content-between"><strong>{{ contact.contact_type }}</strong><span class="text-secondary small">v{{ contact.version }}</span></div>
+          <p class="mb-2"><code>{{ contact.value }}</code></p>
+          <form method="post" action="/candidate-profile/contacts/{{ contact.id }}/permissions" class="d-flex flex-wrap align-items-center gap-3">
+            <input type="hidden" name="version" value="{{ contact.version }}">
+            {{ permission_switch('store_private', 'Локально', contact.store_private) }}
+            {{ permission_switch('use_for_ai_analysis', 'AI', contact.use_for_ai_analysis) }}
+            {{ permission_switch('use_in_scoring', 'Scoring', contact.use_in_scoring) }}
+            {{ permission_switch('use_in_draft', 'Draft', contact.use_in_draft) }}
+            {{ permission_switch('send_externally', 'Отправка', contact.send_externally) }}
+            {{ permission_switch('use_in_signature', 'Подпись', contact.use_in_signature) }}
+            {{ permission_switch('publish_publicly', 'Публикация', contact.publish_publicly) }}
+            <button class="btn btn-sm btn-outline-secondary" type="submit">Обновить разрешения</button>
+          </form>
+          <form method="post" action="/candidate-profile/contacts/{{ contact.id }}/delete" class="border border-danger rounded p-2 mt-3" onsubmit="return window.confirm('Удалить только этот контакт?');">
+            <input type="hidden" name="version" value="{{ contact.version }}">
+            <div class="form-check mb-2"><input required class="form-check-input" type="checkbox" name="confirm_delete" value="yes" id="confirm-delete-contact-{{ contact.id }}"><label class="form-check-label small" for="confirm-delete-contact-{{ contact.id }}">Подтверждаю удаление этого контакта</label></div>
+            <button class="btn btn-sm btn-outline-danger" type="submit">Удалить контакт</button>
+          </form>
+        </article>
+      {% else %}<p class="text-secondary">Контактов пока нет.</p>{% endfor %}
+    </div>
+  </section>
+
+  <section id="rules" class="card border-0 shadow-sm mb-4">
+    <div class="card-body p-4">
+      <h2 class="h5">Правила генерации</h2>
+      <form method="post" action="/candidate-profile/rules" class="row g-3 mb-4">
+        <div class="col-md-3"><input class="form-control" required name="rule_type" placeholder="wording"></div>
+        <div class="col-md-6"><input class="form-control" required name="text" placeholder="Never use Senior or Expert"></div>
+        <div class="col-md-2"><select class="form-select" name="severity"><option value="block">Block</option><option value="warning">Warning</option></select></div>
+        <div class="col-md-1"><input class="form-control" type="number" name="priority" min="0" max="1000" value="100"></div>
+        <div class="col-12"><button class="btn btn-outline-primary" type="submit">Добавить правило</button></div>
+      </form>
+      {% for rule in rules %}<div class="border rounded p-3 mb-2"><span class="badge {% if rule.severity == 'block' %}text-bg-danger{% else %}text-bg-warning{% endif %}">{{ rule.severity }}</span> <strong>{{ rule.rule_type }}</strong> — {{ rule.text }}</div>{% else %}<p class="text-secondary">Правил пока нет.</p>{% endfor %}
+    </div>
+  </section>
+
+  <section id="import" class="card border-0 shadow-sm mb-4">
+    <div class="card-body p-4">
+      <h2 class="h5">Контролируемый JSON import</h2>
+      <p class="small text-secondary">Сначала создаётся preview. Данные не заменяются, не удаляются и не получают VERIFIED или permissions автоматически.</p>
+      <form method="post" action="/candidate-profile/import-preview" class="row g-3">
+        <div class="col-md-4"><input required class="form-control" name="source_filename" maxlength="240" placeholder="candidate-profile.json"></div>
+        <div class="col-12"><textarea required class="form-control font-monospace" name="items_json" rows="8" maxlength="200000" placeholder='[{"section_type":"technical_skills","entity_type":"skill","data":{"name":"Python","skill_group":"technology","actual_level":"practical","limitations":"Needs review"}}]'></textarea></div>
+        <div class="col-12"><button class="btn btn-outline-primary">Создать preview</button></div>
+      </form>
+    </div>
+  </section>
+
+  <section class="card border-0 shadow-sm">
+    <div class="card-body p-4">
+      <div class="d-flex flex-wrap justify-content-between gap-3 mb-3">
+        <h2 class="h5 mb-0">Fact pack preview</h2>
+        <select class="form-select w-auto" name="purpose" hx-get="/candidate-profile/fact-pack-preview" hx-target="#fact-pack" hx-trigger="change" hx-include="this">
+          <option value="ai_analysis">AI analysis</option><option value="draft">Draft</option><option value="external_send">External send</option><option value="publication">Publication</option>
+        </select>
+      </div>
+      <div id="fact-pack" hx-get="/candidate-profile/fact-pack-preview" hx-trigger="load"><span class="text-secondary">Загрузка…</span></div>
+    </div>
+  </section>
+  {% endif %}
+{% endblock %}
