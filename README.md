@@ -1,29 +1,44 @@
 # Single Outreach
 
-Single-user portfolio application for finding real companies and current vacancies that may fit an owner's verified professional profile.
+Single Outreach is a single-owner career-outreach application. It continuously finds real companies and vacancies that may fit the owner's verified professional profile, turns public evidence into a clear decision brief, and prepares a message only after the owner decides that the opportunity is worth pursuing.
 
-It turns public research into a reviewable decision: **company → evidence → fit → verified public contact → draft → owner confirmation**. The system does not treat a research link as a contact, does not claim a vacancy without a source, and never sends externally without an explicit owner decision.
+It is a working application, not a lead list or a generic email generator.
 
-## What it demonstrates
+## What the product does
 
-- Background discovery of real companies with official-source research.
-- Evidence-linked company fit and explicit uncertainty/risk presentation.
-- Current-vacancy review distinct from a non-vacancy collaboration hypothesis.
-- Ranked public contact paths: named founder/CEO/HR where supported, otherwise an honestly labelled company channel.
-- Four editable message variants: long/short × professional/friendly.
-- Draft revisions, owner decisions, deferred/closed states and a company-centred activity history.
-- RU/EN interface, responsive workspace, audit trail and fail-closed delivery controls.
+- Runs scheduled daily discovery and accepts ordinary-language manual searches.
+- Researches official company sources, current vacancies and material public signals.
+- Explains the fit in practical terms: the company context, the owner's relevant experience, the possible contribution and the main limitation.
+- Separates a confirmed vacancy from a wider collaboration hypothesis.
+- Shows only the best available contact paths: a named founder, CEO or hiring contact when verified; otherwise an honestly labelled official company channel.
+- Creates four editable drafts for the selected contact: long/short × professional/friendly.
+- Keeps draft revisions, company decisions and activity history inside the same company workspace.
+- Supports Russian and English interfaces, responsive layouts and Moscow-time user-facing dates.
 
-## Product workflow
+The core workflow is:
 
-1. A manual search or daily worker discovers a bounded pool of companies.
-2. The executor verifies the official site, records public evidence, evaluates fit and finds public contact paths.
-3. Only quality-checked opportunities enter **Selected companies**.
-4. Opening a card marks it reviewed without approving it. The owner may return it to new, reject it, or confirm interest.
-5. Confirming interest prepares drafts for a selected verified contact. Confirming a draft is separate from the company decision.
-6. The owner may copy the text or use an explicitly enabled delivery channel. Real delivery remains disabled by default.
+```text
+Daily or manual search
+  → evidence-based company review
+  → fit and contact check
+  → owner decides whether the company is interesting
+  → draft preparation and editing
+  → explicit draft confirmation
+  → manual copy-out or separately enabled delivery
+```
 
-## Local run
+Opening a company is not a decision. Confirming a company and confirming a specific draft are separate actions.
+
+## Safety by design
+
+- Research links are not presented as personal contacts.
+- A message is never sent merely because a draft exists.
+- Real external delivery is disabled in the default configuration and requires separate server-side safeguards and owner confirmation.
+- Local development uses Mailpit only; it never sends to a real mailbox.
+- Production secrets, OAuth tokens, profile data and local `.env` files are excluded from Git and must not appear in logs or UI.
+- Uncertain or incomplete research is shown as uncertainty rather than invented detail.
+
+## Local development
 
 Requirements: Python 3.12+ and PostgreSQL, or Docker Compose.
 
@@ -36,41 +51,42 @@ alembic upgrade head
 uvicorn app.main:app --reload
 ```
 
-Open `http://localhost:8000`. In Docker development, run:
+Open `http://localhost:8000`.
+
+For Docker development:
 
 ```powershell
 docker compose --profile dev up --build
 ```
 
-- App: `http://localhost:8000`
-- Mailpit test inbox: `http://localhost:8025`
+- Application: `http://localhost:8000`
+- Local test mailbox (Mailpit): `http://localhost:8025`
 
-Create the local owner interactively after migrations:
+Create the local owner only after the database migration:
 
 ```powershell
 python scripts/create_owner.py --login owner
 ```
 
-The password is never passed as a command-line argument. Use `--rotate` only when intentionally changing credentials and revoking sessions.
+The script asks for the password interactively; it is never supplied as a command-line argument.
 
-## Safety and data boundaries
-
-- Only synthetic demo data may be committed.
-- Candidate facts are private and require explicit per-purpose permission.
-- Public company material may be used for research; owner profile data is not sent to the company-synthesis provider.
-- Demo mode and external delivery are off by default. Mailpit is for local testing only.
-- Production secrets belong in protected environment configuration, never Git, UI or logs.
-
-## Demo
-
-Run `python scripts/seed_demo.py` only in demo mode to load reserved `.example` records. A useful portfolio walkthrough is: open a selected company, inspect its evidence and fit, identify the labelled public contact, create the four drafts, edit one, view history, confirm it, and stop before any external send.
-
-## Checks
+## Verification
 
 ```powershell
-ruff check .
+ruff check app tests migrations scripts
 mypy app
-pytest
+pytest -q
 ```
 
-The CI quality workflow runs linting, typing, migrations and the PostgreSQL regression suite. Architecture notes under `docs/architecture` describe individual modules; they are implementation references rather than a promise that every optional integration is enabled in a deployment.
+The GitHub Actions workflow runs linting, typing, migrations and the PostgreSQL regression suite. The repository contains synthetic examples only; do not add production database dumps, delivery archives, screenshots with personal data or secrets.
+
+## Repository map
+
+- `app/` — FastAPI application, research, fit, contacts, draft and safety modules.
+- `migrations/` — Alembic schema history.
+- `tests/` — unit and integration regression coverage.
+- `scripts/` — local and production operational helpers; secrets are always entered interactively or supplied through protected environment configuration.
+- `docs/architecture/` — implementation notes.
+- `docs/production/` — deployment and security runbooks.
+
+The project is licensed under the [MIT License](LICENSE).
